@@ -8,9 +8,20 @@ def _run_git(
     stdin_data: str | None = None,
     timeout: float = 30.0,
 ) -> str:
+    # 覆盖 Git LFS 全局配置，防止在后台 pipe 通信时启动 git-lfs 长生命周期过滤器进程发生管道死锁
+    override_config = [
+        "-c",
+        "filter.lfs.required=false",
+        "-c",
+        "filter.lfs.smudge=",
+        "-c",
+        "filter.lfs.clean=",
+        "-c",
+        "filter.lfs.process=",
+    ]
     try:
         result = subprocess.run(
-            ["git"] + args,
+            ["git"] + override_config + args,
             cwd=str(repo_path),
             capture_output=True,
             text=True,
