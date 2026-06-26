@@ -120,14 +120,18 @@ def squash_history(repo_path: str, max_commits: int) -> None:
 
     # 1. 使用 squash 根节点的 tree 创建一个全新的根 commit
     # 移除命令行里的 -m 参数，改通过标准输入传给 commit-tree 避免命令行超长溢出崩溃
-    r_prev = _run_git(path, ["commit-tree", t_squash_root], stdin_data="squashed history")
+    r_prev = _run_git(
+        path, ["commit-tree", t_squash_root], stdin_data="squashed history"
+    )
 
     # 2. 从旧到新，依次重新链式提交保留的 commits（索引从 max_commits - 2 递减到 0）
     for i in range(max_commits - 2, -1, -1):
         c_curr = commits[i]
         t_curr = _run_git(path, ["rev-parse", f"{c_curr}^{{tree}}"])
         msg_curr = _run_git(path, ["show", "-s", "--format=%B", c_curr])
-        r_next = _run_git(path, ["commit-tree", t_curr, "-p", r_prev], stdin_data=msg_curr)
+        r_next = _run_git(
+            path, ["commit-tree", t_curr, "-p", r_prev], stdin_data=msg_curr
+        )
         r_prev = r_next
 
     # 3. 更新分支指向，并硬重置工作区以使文件同步
