@@ -12,6 +12,7 @@ from transplay_mcp.core.git_manager import (
     git_diff_check,
     squash_history,
 )
+from transplay_mcp.core.logger import logger
 
 # 1. 初始化 FastMCP 实例
 mcp = FastMCP("transplay-mcp")
@@ -101,6 +102,7 @@ def _get_repo_lock(game_id: str, mod_id: str) -> threading.Lock:
     with _repo_locks_lock:
         if key not in _repo_locks:
             _repo_locks[key] = threading.Lock()
+            logger.debug(f"[_get_repo_lock] Created new Lock object for key: {key}")
         return _repo_locks[key]
 
 
@@ -157,17 +159,24 @@ def git_diff_check_tool(
         need_origin: 是否计算 origin 目录的 diff 差异。
         need_ir_origin: 是否计算 ir/origin 目录 of diff 差异。
     """
+    logger.info(
+        f"[git_diff_check_tool] Received request. game_id: {game_id}, mod_id: {mod_id}, "
+        f"need_origin: {need_origin}, need_ir_origin: {need_ir_origin}"
+    )
     assert vault_path is not None
     repo_path = _safe_resolve_path(vault_path, game_id, mod_id)
 
     # Create directory if it does not exist
     repo_path.mkdir(parents=True, exist_ok=True)
 
+    logger.debug(f"[git_diff_check_tool] Acquiring lock for repo: {repo_path}")
     lock = _get_repo_lock(game_id, mod_id)
     with lock:
+        logger.debug(f"[git_diff_check_tool] Lock acquired for repo: {repo_path}")
         diff_output = git_diff_check(
             str(repo_path), need_origin=need_origin, need_ir_origin=need_ir_origin
         )
+        logger.info(f"[git_diff_check_tool] Successfully finished. Returning diff of length {len(diff_output)}")
         return diff_output
 
 

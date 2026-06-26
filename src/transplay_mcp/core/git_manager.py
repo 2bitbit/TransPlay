@@ -1,5 +1,7 @@
 import subprocess
+import time
 from pathlib import Path
+from transplay_mcp.core.logger import logger
 
 
 def _run_git(
@@ -19,9 +21,12 @@ def _run_git(
         "-c",
         "filter.lfs.process=",
     ]
+    full_cmd = ["git"] + override_config + args
+    logger.debug(f"[_run_git] Executing command: {' '.join(full_cmd)} in CWD: {repo_path}")
+    start_time = time.time()
     try:
         result = subprocess.run(
-            ["git"] + override_config + args,
+            full_cmd,
             cwd=str(repo_path),
             capture_output=True,
             text=True,
@@ -30,12 +35,24 @@ def _run_git(
             input=stdin_data,
             timeout=timeout,
         )
+        elapsed = time.time() - start_time
+        logger.debug(f"[_run_git] Command finished in {elapsed:.3f}s with exit code: {result.returncode}")
     except subprocess.TimeoutExpired as e:
+        elapsed = time.time() - start_time
+        logger.error(f"[_run_git] Command TIMED OUT after {elapsed:.3f}s: {' '.join(full_cmd)}")
         raise RuntimeError(
             f"Git command timed out after {timeout} seconds: git {' '.join(args)}"
         ) from e
+    except Exception as e:
+        logger.error(f"[_run_git] Command failed with exception: {e}")
+        raise
 
     if result.returncode != 0:
+        logger.error(
+            f"[_run_git] Command failed.\n"
+            f"stdout: {result.stdout.strip()}\n"
+            f"stderr: {result.stderr.strip()}"
+        )
         raise RuntimeError(
             f"Git command failed: git {' '.join(args)}\n"
             f"Exit code: {result.returncode}\n"
@@ -43,6 +60,7 @@ def _run_git(
             f"stderr: {result.stderr}"
         )
     return result.stdout.strip()
+
 
 # 进程级缓存，保存已配置过 Git local user 的仓库物理路径，避免冗余探测
 _configured_repos: set[str] = set()
@@ -52,16 +70,21 @@ def _ensure_git_user_config(repo_path: str | Path) -> None:
     if repo_str in _configured_repos:
         return
 
+    logger.debug(f"[_ensure_git_user_config] Configuring git user for {repo_str}")
     # 确保本地 git 配置设置了 user.name 和 user.email，
     # 以便在无头环境（如 CI/CD）中能正常进行 commit 提交
     try:
         _run_git(repo_path, ["config", "--local", "user.name"])
+        logger.debug("[_ensure_git_user_config] Local user.name is already set")
     except RuntimeError:
+        logger.info("[_ensure_git_user_config] Setting local user.name to 'TransPlay Agent'")
         _run_git(repo_path, ["config", "--local", "user.name", "TransPlay Agent"])
 
     try:
         _run_git(repo_path, ["config", "--local", "user.email"])
+        logger.debug("[_ensure_git_user_config] Local user.email is already set")
     except RuntimeError:
+        logger.info("[_ensure_git_user_config] Setting local user.email to 'agent@transplay.local'")
         _run_git(
             repo_path,
             ["config", "--local", "user.email", "agent@transplay.local"],
@@ -70,33 +93,48 @@ def _ensure_git_user_config(repo_path: str | Path) -> None:
 
 def git_diff_check(repo_path: str, need_origin: bool, need_ir_origin: bool) -> str:
     path = Path(repo_path)
+    logger.info(f"[git_diff_check] Start diff check on {repo_path} (need_origin={need_origin}, need_ir_origin={need_ir_origin})")
+    
     if not (path / ".git").exists():
+        logger.info(f"[git_diff_check] .git folder not found. Initializing repository...")
         _run_git(path, ["init"])
         _ensure_git_user_config(path)
         # 提交一个初始的空 commit，以确立 HEAD 分支指针
         _run_git(path, ["commit", "--allow-empty", "-m", "Initial commit"])
     else:
+        logger.debug(f"[git_diff_check] .git folder exists.")
         _ensure_git_user_config(path)
 
     # 运行 git add -N .，以追踪未跟踪的新文件以便进行差异比对
+    logger.debug("[git_diff_check] Tracking untracked files using git add -N .")
     _run_git(path, ["add", "-N", "."])
 
     diffs: list[str] = []
     if need_origin:
         # 检查 origin 目录是否存在以防报错
         if (path / "origin").exists():
+            logger.debug("[git_diff_check] Getting diff for origin...")
             diff_out = _run_git(path, ["diff", "HEAD", "--", "origin"])
+            logger.debug(f"[git_diff_check] origin diff length: {len(diff_out)}")
             if diff_out:
                 diffs.append(diff_out)
+        else:
+            logger.warning("[git_diff_check] origin directory does not exist")
 
     if need_ir_origin:
         # 检查 ir/origin 目录是否存在
         if (path / "ir" / "origin").exists():
+            logger.debug("[git_diff_check] Getting diff for ir/origin...")
             diff_out = _run_git(path, ["diff", "HEAD", "--", "ir/origin"])
+            logger.debug(f"[git_diff_check] ir/origin diff length: {len(diff_out)}")
             if diff_out:
                 diffs.append(diff_out)
+        else:
+            logger.warning("[git_diff_check] ir/origin directory does not exist")
 
-    return "\n\n".join(diffs)
+    result_diff = "\n\n".join(diffs)
+    logger.info(f"[git_diff_check] Completed diff check. Output diff length: {len(result_diff)}")
+    return result_diff
 
 def git_commit_version(repo_path: str, version: str, message: str) -> None:
     path = Path(repo_path)
