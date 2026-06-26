@@ -6,6 +6,21 @@ from pathlib import Path
 # 使用进程 PID 命名日志文件，防止 Windows 多进程并发写入同一个日志文件时引发文件锁死锁
 LOG_FILE = Path(__file__).resolve().parent.parent / f"transplay_mcp_{os.getpid()}.log"
 
+# 自动清理机制：每次有新进程启动时，自动扫描并清理旧的 PID 日志文件，只保留最近修改的 10 个，防范文件数量与磁盘空间膨胀
+try:
+    log_dir = LOG_FILE.parent
+    existing_logs = list(log_dir.glob("transplay_mcp_*.log"))
+    # 按修改时间从新到旧排序
+    existing_logs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    if len(existing_logs) > 10:
+        for old_log in existing_logs[10:]:
+            try:
+                old_log.unlink()
+            except Exception:
+                pass
+except Exception:
+    pass
+
 logger = logging.getLogger("transplay_mcp")
 logger.setLevel(logging.DEBUG)
 
