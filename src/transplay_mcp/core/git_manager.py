@@ -3,17 +3,27 @@ from pathlib import Path
 
 
 def _run_git(
-    repo_path: str | Path, args: list[str], stdin_data: str | None = None
+    repo_path: str | Path,
+    args: list[str],
+    stdin_data: str | None = None,
+    timeout: float = 30.0,
 ) -> str:
-    result = subprocess.run(
-        ["git"] + args,
-        cwd=str(repo_path),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        input=stdin_data,
-    )
+    try:
+        result = subprocess.run(
+            ["git"] + args,
+            cwd=str(repo_path),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            input=stdin_data,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError(
+            f"Git command timed out after {timeout} seconds: git {' '.join(args)}"
+        ) from e
+
     if result.returncode != 0:
         raise RuntimeError(
             f"Git command failed: git {' '.join(args)}\n"

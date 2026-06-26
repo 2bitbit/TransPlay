@@ -214,3 +214,16 @@ def test_squash_history_ultra_long_message(tmp_path):
     # 验证裁剪成功，历史提交被削减到 3
     new_commits = run_git(repo_path, ["log", "--format=%H"]).splitlines()
     assert len(new_commits) == 3
+
+def test_run_git_timeout(monkeypatch):
+    import subprocess
+    from transplay_mcp.core.git_manager import _run_git
+
+    def mock_run(*args, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=args[0], timeout=30.0)
+
+    monkeypatch.setattr(subprocess, "run", mock_run)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        _run_git(".", ["status"])
+    assert "timed out after" in str(exc_info.value)
