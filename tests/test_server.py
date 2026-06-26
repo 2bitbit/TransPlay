@@ -15,6 +15,14 @@ def setup_mcp_config(tmp_path, monkeypatch):
     # Inject configuration via environment variables
     monkeypatch.setenv("TransPlayVault", str(vault_dir.absolute()))
     monkeypatch.setenv("TransPlayMaxCommits", "3")
+    
+    # Force reload server module to refresh internal global variables
+    import importlib
+    try:
+        import transplay_mcp.server
+        importlib.reload(transplay_mcp.server)
+    except ImportError:
+        pass
     return vault_dir
 
 def test_server_resources_and_tools(setup_mcp_config):

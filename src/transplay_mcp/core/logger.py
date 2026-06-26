@@ -1,4 +1,5 @@
 import logging
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 # Log file path: src/transplay_mcp/transplay_mcp.log
@@ -12,8 +13,10 @@ if not logger.handlers:
         "[%(asctime)s] [%(levelname)s] [%(filename)s:%(lineno)d] - %(message)s"
     )
     
-    # File handler
-    file_handler = logging.FileHandler(LOG_FILE, encoding="utf-8")
+    # File handler with rotation (max 5MB per file, max 5 backups)
+    file_handler = RotatingFileHandler(
+        LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=5, encoding="utf-8"
+    )
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
