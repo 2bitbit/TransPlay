@@ -1,6 +1,6 @@
-import json
 import os
 import sys
+import threading
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
@@ -19,76 +19,51 @@ mcp = FastMCP("transplay-mcp")
 # 2. 读取配置文件并执行 Fast-fail 强校验
 is_testing = os.environ.get("TRANSPLAY_TESTING") == "1"
 
-# 1. 加载 TransPlayVault 和 TransPlayMaxCommits 环境变量
+# 1. 直接从环境变量（由客户端/Harness从全局配置中读取并注入）中获取参数
 vault_path_str = os.environ.get("TransPlayVault")
 max_commits_str = os.environ.get("TransPlayMaxCommits")
 
-# 若未在环境变量中设置，则尝试从全局 mcp_config.json 配置文件中加载
-if not vault_path_str or not max_commits_str:
-    global_config_path = Path.home() / ".gemini" / "antigravity" / "mcp_config.json"
-    if global_config_path.exists():
-        try:
-            with open(global_config_path, encoding="utf-8") as f:
-                global_config = json.load(f)
-
-            # 从 mcpServers 嵌套配置块中查找
-            env_block = (
-                global_config.get("mcpServers", {})
-                .get("transplay-mcp", {})
-                .get("env", {})
-            )
-            if not vault_path_str:
-                vault_path_str = env_block.get("TransPlayVault")
-                if not vault_path_str:
-                    vault_path_str = global_config.get("TransPlayVault")
-
-            if not max_commits_str:
-                max_commits_str = env_block.get("TransPlayMaxCommits")
-                if not max_commits_str:
-                    val = global_config.get("TransPlayMaxCommits")
-                    if val is not None:
-                        max_commits_str = str(val)
-        except Exception as e:
-            if not is_testing:
-                print(
-                    f"CRITICAL: Failed to parse global mcp_config.json: {e}",
-                    file=sys.stderr,
-                )
-                sys.exit(1)
-
-# 应用并校验配置参数
+# 2. 应用并校验配置参数
 vault_path: Path | None = None
 if vault_path_str:
     vault_path = Path(vault_path_str)
+else:
+    if is_testing:
+        vault_path = Path.cwd() / "dummy_vault"
+    else:
+        print(
+            "CRITICAL: Environment variable 'TransPlayVault' is not configured. "
+            "Please specify it in the 'env' block of your global MCP config.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
 max_commits: int | None = None
 if max_commits_str:
     try:
         max_commits = int(max_commits_str)
-    except ValueError:
-        pass
-
-# 执行崩溃拦截强校验（Fail-fast）
-if vault_path is None:
-    if is_testing:
-        vault_path = Path.cwd() / "dummy_vault"
-    else:
+    except ValueError as e:
         print(
-            "CRITICAL: TransPlayVault is not configured. Please define it in "
-            "the environment variable 'TransPlayVault' or in your global "
-            "mcp_config.json.",
+            f"CRITICAL: Environment variable 'TransPlayMaxCommits' is invalid. "
+            f"Value '{max_commits_str}' cannot be parsed as an integer: {e}",
             file=sys.stderr,
         )
         sys.exit(1)
 
-if max_commits is None or max_commits < 2:
+    if max_commits < 2:
+        print(
+            "CRITICAL: Environment variable 'TransPlayMaxCommits' value "
+            f"({max_commits}) is invalid. It must be an integer >= 2.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+else:
     if is_testing:
         max_commits = 3
     else:
         print(
-            "CRITICAL: TransPlayMaxCommits is not configured or invalid (must "
-            "be an integer >= 2). Please configure it in environment "
-            "variables or in global mcp_config.json.",
+            "CRITICAL: Environment variable 'TransPlayMaxCommits' is not configured. "
+            "Please specify it in the 'env' block of your global MCP config.",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -100,6 +75,36 @@ def get_vault_path() -> str:
     """获取此服务端统一管理的 TransPlayVault 目录的绝对物理路径。"""
     assert vault_path is not None
     return str(vault_path.absolute())
+
+
+@mcp.resource("transplay://config/max_commits")
+def get_max_commits() -> str:
+    """获取配置的 Git 最大历史提交总数限制。"""
+    assert max_commits is not None
+    return str(max_commits)
+
+
+# 并发控制锁机制：针对每个模组仓库拥有独立的排他锁，防止高并发导致 Git 冲突
+_repo_locks: dict[tuple[str, str], threading.Lock] = {}
+_repo_locks_lock = threading.Lock()
+
+
+def _get_repo_lock(game_id: str, mod_id: str) -> threading.Lock:
+    key = (game_id, mod_id)
+    with _repo_locks_lock:
+        if key not in _repo_locks:
+            _repo_locks[key] = threading.Lock()
+        return _repo_locks[key]
+
+
+# 安全路径边界检查，防止 game_id、mod_id、sub_dir 包含 "../" 进行路径穿越攻击
+def _safe_resolve_path(base_path: Path, *parts: str) -> Path:
+    # 结合 parts 生成路径，resolve 消除相对路径
+    resolved = (base_path / Path(*parts)).resolve()
+    # 强校验是否仍在 base_path 目录下
+    if not resolved.is_relative_to(base_path.resolve()):
+        raise PermissionError("Path traversal detected! Access denied.")
+    return resolved
 
 
 # 4. 注册并暴露 Tools 工具接口
@@ -115,15 +120,21 @@ def format_json_files_tool(game_id: str, mod_id: str, sub_dir: str) -> str:
         sub_dir: 待格式化的子目录名（如 origin、ir/origin）。
     """
     assert vault_path is not None
-    target_dir = vault_path / game_id / mod_id / sub_dir
+    try:
+        target_dir = _safe_resolve_path(vault_path, game_id, mod_id, sub_dir)
+    except PermissionError as e:
+        return f"Error: {e}"
+
     if not target_dir.exists():
         return f"Error: Target directory does not exist at {target_dir}"
 
-    try:
-        format_json_files(target_dir)
-        return f"JSON files in {game_id}/{mod_id}/{sub_dir} formatted successfully."
-    except Exception as e:
-        return f"Error formatting JSON files: {str(e)}"
+    lock = _get_repo_lock(game_id, mod_id)
+    with lock:
+        try:
+            format_json_files(target_dir)
+            return f"JSON files in {game_id}/{mod_id}/{sub_dir} formatted successfully."
+        except Exception as e:
+            return f"Error formatting JSON files: {str(e)}"
 
 
 @mcp.tool()
@@ -141,17 +152,23 @@ def git_diff_check_tool(
         need_ir_origin: 是否计算 ir/origin 目录的 diff 差异。
     """
     assert vault_path is not None
-    repo_path = vault_path / game_id / mod_id
+    try:
+        repo_path = _safe_resolve_path(vault_path, game_id, mod_id)
+    except PermissionError as e:
+        return f"Error: {e}"
+
     # Create directory if it does not exist
     repo_path.mkdir(parents=True, exist_ok=True)
 
-    try:
-        diff_output = git_diff_check(
-            str(repo_path), need_origin=need_origin, need_ir_origin=need_ir_origin
-        )
-        return diff_output
-    except Exception as e:
-        return f"Error checking git diff: {str(e)}"
+    lock = _get_repo_lock(game_id, mod_id)
+    with lock:
+        try:
+            diff_output = git_diff_check(
+                str(repo_path), need_origin=need_origin, need_ir_origin=need_ir_origin
+            )
+            return diff_output
+        except Exception as e:
+            return f"Error checking git diff: {str(e)}"
 
 
 @mcp.tool()
@@ -167,28 +184,32 @@ def git_commit_version_tool(
         message: 详细的提交说明信息。
     """
     assert vault_path is not None
-    repo_path = vault_path / game_id / mod_id
+    try:
+        repo_path = _safe_resolve_path(vault_path, game_id, mod_id)
+    except PermissionError as e:
+        return f"Error: {e}"
+
     if not repo_path.exists():
         return f"Error: Mod repository path does not exist: {repo_path}"
 
-    try:
-        # 提交指定版本
-        git_commit_version(str(repo_path), version, message)
-        # 执行历史剪枝以限制提交总数，控制硬盘空间占用
-        assert max_commits is not None
-        squash_history(str(repo_path), max_commits)
-        return (
-            f"Version {version} committed successfully in "
-            f"{game_id}/{mod_id} with history pruned "
-            f"(limit: {max_commits})."
-        )
-    except Exception as e:
-        return f"Error committing version: {str(e)}"
-
+    lock = _get_repo_lock(game_id, mod_id)
+    with lock:
+        try:
+            # 提交指定版本
+            git_commit_version(str(repo_path), version, message)
+            # 执行历史剪枝以限制提交总数，控制硬盘空间占用
+            assert max_commits is not None
+            squash_history(str(repo_path), max_commits)
+            return (
+                f"Version {version} committed successfully in "
+                f"{game_id}/{mod_id} with history pruned "
+                f"(limit: {max_commits})."
+            )
+        except Exception as e:
+            return f"Error committing version: {str(e)}"
 
 def main() -> None:
     mcp.run()
-
 
 if __name__ == "__main__":
     main()

@@ -127,3 +127,69 @@ def test_squash_history(tmp_path):
     # Verify file contents are unchanged (HEAD state is preserved)
     for i in range(1, 5):
         assert (repo_path / f"file_{i}.txt").read_text() == f"content {i}"
+
+def test_git_commit_chinese_message(tmp_path):
+    repo_path = tmp_path / "test_repo_zh"
+    repo_path.mkdir()
+    
+    # 自动初始化
+    git_diff_check(str(repo_path), need_origin=False, need_ir_origin=False)
+    
+    # 写入包含中文的文件
+    origin_dir = repo_path / "origin"
+    origin_dir.mkdir(exist_ok=True)
+    (origin_dir / "中文模组.json").write_text('{"测试": "汉化内容"}', encoding="utf-8")
+    
+    # 进行带中文的 commit
+    git_commit_version(str(repo_path), version="1.0.0", message="中文提交测试：添加中文汉化文件")
+    
+    # 读取最新日志，验证中文没有乱码且成功提交
+    # 为 run_git 添加显式的 utf-8 解码，确保测试用例也能正常在 Windows 解码
+    result = subprocess.run(
+        ["git", "log", "-n", "1", "--format=%B"],
+        cwd=str(repo_path),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        check=True,
+    )
+    log_out = result.stdout.strip()
+    assert "中文提交测试" in log_out
+    assert "添加中文汉化文件" in log_out
+
+def test_squash_history_detached_head(tmp_path):
+    repo_path = tmp_path / "test_repo_detached"
+    repo_path.mkdir()
+
+    # 初始化
+    git_diff_check(str(repo_path), need_origin=False, need_ir_origin=False)
+    
+    # 写入并提交 4 个 commit
+    for i in range(1, 5):
+        (repo_path / f"file_{i}.txt").write_text(f"content {i}")
+        git_commit_version(str(repo_path), version=f"1.0.{i}", message=f"Commit {i}")
+        
+    # 获取所有的 commit hashes
+    commits = run_git(repo_path, ["log", "--format=%H"]).splitlines()
+    assert len(commits) == 5  # 1 initial + 4 commits
+    
+    # Checkout 游离到 HEAD (即 commits[0]) 上，进入 Detached HEAD 状态
+    run_git(repo_path, ["checkout", commits[0]])
+    
+    # 确认当前确实处于游离 HEAD 状态（分支名为 HEAD）
+    branch = run_git(repo_path, ["rev-parse", "--abbrev-ref", "HEAD"])
+    assert branch == "HEAD"
+    
+    # 在游离状态下运行 squash_history 裁剪至 3 个历史
+    squash_history(str(repo_path), max_commits=3)
+    
+    # 验证 refs/heads/HEAD 畸形分支没有被意外创建
+    assert not (repo_path / ".git" / "refs" / "heads" / "HEAD").exists()
+    
+    # 验证当前的 commits 树长度被剪裁成了 3
+    new_commits = run_git(repo_path, ["log", "--format=%H"]).splitlines()
+    assert len(new_commits) == 3
+    
+    # 验证当前 HEAD 的 tree 指向最新一次提交 file_4.txt 的内容
+    assert (repo_path / "file_4.txt").read_text() == "content 4"

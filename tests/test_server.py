@@ -18,9 +18,9 @@ def setup_mcp_config(tmp_path, monkeypatch):
     return vault_dir
 
 def test_server_resources_and_tools(setup_mcp_config):
-    # Import inside test after environment and config mock are set up
     from transplay_mcp.server import (
         get_vault_path,
+        get_max_commits,
         format_json_files_tool,
         git_diff_check_tool,
         git_commit_version_tool,
@@ -28,8 +28,9 @@ def test_server_resources_and_tools(setup_mcp_config):
     
     vault_dir = setup_mcp_config
 
-    # Test Resource get_vault_path
+    # Test Resources
     assert get_vault_path() == str(vault_dir.absolute())
+    assert get_max_commits() == "3"
 
     # Test git_diff_check_tool (should auto-init repo)
     game_id = "noita"
@@ -72,3 +73,76 @@ def test_server_resources_and_tools(setup_mcp_config):
         check=True,
     )
     assert "version: 1.1.0" in result.stdout
+
+
+def test_server_config_invalid_max_commits(monkeypatch):
+    import importlib
+    import transplay_mcp.server
+    
+    # 模拟错误的 TransPlayMaxCommits (非整数)
+    monkeypatch.setenv("TransPlayMaxCommits", "not-an-int")
+    
+    with pytest.raises(SystemExit) as excinfo:
+        importlib.reload(transplay_mcp.server)
+    assert excinfo.value.code == 1
+
+
+def test_server_config_invalid_max_commits_less_than_2(monkeypatch):
+    import importlib
+    import transplay_mcp.server
+    
+    # 模拟错误的 TransPlayMaxCommits (< 2)
+    monkeypatch.setenv("TransPlayMaxCommits", "1")
+    
+    with pytest.raises(SystemExit) as excinfo:
+        importlib.reload(transplay_mcp.server)
+    assert excinfo.value.code == 1
+
+
+def test_server_path_traversal_protection(setup_mcp_config):
+    from transplay_mcp.server import (
+        format_json_files_tool,
+        git_diff_check_tool,
+        git_commit_version_tool,
+    )
+    
+    # 传入含有 ../ 越界路径的参数
+    bad_game = "../bad_game"
+    bad_mod = "bad_mod"
+    
+    res1 = format_json_files_tool(bad_game, bad_mod, "origin")
+    assert "Path traversal detected" in res1
+    
+    res2 = git_diff_check_tool(bad_game, bad_mod, need_origin=True, need_ir_origin=False)
+    assert "Path traversal detected" in res2
+    
+    res3 = git_commit_version_tool(bad_game, bad_mod, version="1.0.0", message="msg")
+    assert "Path traversal detected" in res3
+
+
+def test_server_concurrency_lock(setup_mcp_config):
+    from transplay_mcp.server import git_diff_check_tool
+    
+    game_id = "concurrency_game"
+    mod_id = "test_mod"
+    
+    # 用多线程模拟并发调用同一个仓库的 tool
+    results = []
+    
+    def worker():
+        # 调用 git_diff_check_tool (会触发 _get_repo_lock 串行化)
+        res = git_diff_check_tool(game_id, mod_id, need_origin=True, need_ir_origin=False)
+        results.append(res)
+
+    import threading
+    t1 = threading.Thread(target=worker)
+    t2 = threading.Thread(target=worker)
+    
+    t1.start()
+    t2.start()
+    
+    t1.join()
+    t2.join()
+    
+    # 验证是否都顺利返回（没有爆出 index.lock 冲突引发的失败）
+    assert len(results) == 2

@@ -55,3 +55,31 @@ def test_format_json_files_invalid_json(tmp_path):
     # We expect format_json_files to raise ValueError or JSONDecodeError when encountering malformed JSON
     with pytest.raises((json.JSONDecodeError, ValueError)):
         format_json_files(tmp_path)
+
+def test_format_json_files_bom_handling(tmp_path):
+    # 写入带 UTF-8 BOM 的 JSON 文件
+    bom_file = tmp_path / "bom.json"
+    content = '{"b": 2, "a": 1}'
+    # UTF-8 BOM: \xef\xbb\xbf
+    bom_file.write_bytes(b'\xef\xbb\xbf' + content.encode('utf-8'))
+
+    # 执行格式化，应该兼容读取并正确写入（不带 BOM，但已格式化）
+    format_json_files(tmp_path)
+    
+    # 验证是否格式化成功
+    expected = '{\n  "a": 1,\n  "b": 2\n}'
+    assert bom_file.read_text(encoding="utf-8") == expected
+
+def test_format_json_files_skips_hidden_dirs(tmp_path):
+    # 创建隐藏目录 .git
+    git_dir = tmp_path / ".git"
+    git_dir.mkdir()
+    
+    # 写入一个未格式化的 JSON 文件
+    json_file = git_dir / "config.json"
+    original = '{"b": 2, "a": 1}'
+    json_file.write_text(original)
+    
+    # 执行格式化，它应该跳过隐藏目录，保持文件不变
+    format_json_files(tmp_path)
+    assert json_file.read_text() == original

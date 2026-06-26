@@ -8,6 +8,7 @@ def _run_git(repo_path: str | Path, args: list[str]) -> str:
         cwd=str(repo_path),
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     if result.returncode != 0:
         raise RuntimeError(
@@ -18,7 +19,14 @@ def _run_git(repo_path: str | Path, args: list[str]) -> str:
         )
     return result.stdout.strip()
 
+# 进程级缓存，保存已配置过 Git local user 的仓库物理路径，避免冗余探测
+_configured_repos: set[str] = set()
+
 def _ensure_git_user_config(repo_path: str | Path) -> None:
+    repo_str = str(Path(repo_path).resolve())
+    if repo_str in _configured_repos:
+        return
+
     # 确保本地 git 配置设置了 user.name 和 user.email，
     # 以便在无头环境（如 CI/CD）中能正常进行 commit 提交
     try:
@@ -33,6 +41,7 @@ def _ensure_git_user_config(repo_path: str | Path) -> None:
             repo_path,
             ["config", "--local", "user.email", "agent@transplay.local"],
         )
+    _configured_repos.add(repo_str)
 
 def git_diff_check(repo_path: str, need_origin: bool, need_ir_origin: bool) -> str:
     path = Path(repo_path)
@@ -117,5 +126,8 @@ def squash_history(repo_path: str, max_commits: int) -> None:
         r_prev = r_next
 
     # 3. 更新分支指向，并硬重置工作区以使文件同步
-    _run_git(path, ["update-ref", f"refs/heads/{branch_name}", r_prev])
+    # 若 branch_name 为 "HEAD" 说明处于游离状态，更新目标应直接为 "HEAD"
+    # 而不是诡异的 refs/heads/HEAD 引用分支
+    ref_target = "HEAD" if branch_name == "HEAD" else f"refs/heads/{branch_name}"
+    _run_git(path, ["update-ref", ref_target, r_prev])
     _run_git(path, ["reset", "--hard", r_prev])
