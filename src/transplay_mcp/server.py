@@ -132,21 +132,15 @@ def format_json_files_tool(game_id: str, mod_id: str, sub_dir: str) -> str:
         sub_dir: 待格式化的子目录名（如 origin、ir/origin）。
     """
     assert vault_path is not None
-    try:
-        target_dir = _safe_resolve_path(vault_path, game_id, mod_id, sub_dir)
-    except PermissionError as e:
-        return f"Error: {e}"
+    target_dir = _safe_resolve_path(vault_path, game_id, mod_id, sub_dir)
 
     if not target_dir.exists():
-        return f"Error: Target directory does not exist at {target_dir}"
+        raise FileNotFoundError(f"Target directory does not exist at {target_dir}")
 
     lock = _get_repo_lock(game_id, mod_id)
     with lock:
-        try:
-            format_json_files(target_dir)
-            return f"JSON files in {game_id}/{mod_id}/{sub_dir} formatted successfully."
-        except Exception as e:
-            return f"Error formatting JSON files: {str(e)}"
+        format_json_files(target_dir)
+        return f"JSON files in {game_id}/{mod_id}/{sub_dir} formatted successfully."
 
 
 @mcp.tool()
@@ -161,26 +155,20 @@ def git_diff_check_tool(
         game_id: 游戏唯一标识。
         mod_id: 模组唯一标识。
         need_origin: 是否计算 origin 目录的 diff 差异。
-        need_ir_origin: 是否计算 ir/origin 目录的 diff 差异。
+        need_ir_origin: 是否计算 ir/origin 目录 of diff 差异。
     """
     assert vault_path is not None
-    try:
-        repo_path = _safe_resolve_path(vault_path, game_id, mod_id)
-    except PermissionError as e:
-        return f"Error: {e}"
+    repo_path = _safe_resolve_path(vault_path, game_id, mod_id)
 
     # Create directory if it does not exist
     repo_path.mkdir(parents=True, exist_ok=True)
 
     lock = _get_repo_lock(game_id, mod_id)
     with lock:
-        try:
-            diff_output = git_diff_check(
-                str(repo_path), need_origin=need_origin, need_ir_origin=need_ir_origin
-            )
-            return diff_output
-        except Exception as e:
-            return f"Error checking git diff: {str(e)}"
+        diff_output = git_diff_check(
+            str(repo_path), need_origin=need_origin, need_ir_origin=need_ir_origin
+        )
+        return diff_output
 
 
 @mcp.tool()
@@ -191,34 +179,28 @@ def git_commit_version_tool(
 
     Args:
         game_id: 游戏唯一标识。
-        mod_id: 模组唯一标识。
+        mod_id: 模组唯一标识.
         version: 标记本次提交的模组版本号（例如 1.0.0）。
         message: 详细的提交说明信息。
     """
     assert vault_path is not None
-    try:
-        repo_path = _safe_resolve_path(vault_path, game_id, mod_id)
-    except PermissionError as e:
-        return f"Error: {e}"
+    repo_path = _safe_resolve_path(vault_path, game_id, mod_id)
 
     if not repo_path.exists():
-        return f"Error: Mod repository path does not exist: {repo_path}"
+        raise FileNotFoundError(f"Mod repository path does not exist: {repo_path}")
 
     lock = _get_repo_lock(game_id, mod_id)
     with lock:
-        try:
-            # 提交指定版本
-            git_commit_version(str(repo_path), version, message)
-            # 执行历史剪枝以限制提交总数，控制硬盘空间占用
-            assert max_commits is not None
-            squash_history(str(repo_path), max_commits)
-            return (
-                f"Version {version} committed successfully in "
-                f"{game_id}/{mod_id} with history pruned "
-                f"(limit: {max_commits})."
-            )
-        except Exception as e:
-            return f"Error committing version: {str(e)}"
+        # 提交指定版本
+        git_commit_version(str(repo_path), version, message)
+        # 执行历史剪枝以限制提交总数，控制硬盘空间占用
+        assert max_commits is not None
+        squash_history(str(repo_path), max_commits)
+        return (
+            f"Version {version} committed successfully in "
+            f"{game_id}/{mod_id} with history pruned "
+            f"(limit: {max_commits})."
+        )
 
 def main() -> None:
     mcp.run()

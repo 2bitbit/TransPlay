@@ -110,18 +110,22 @@ def test_server_path_traversal_protection(setup_mcp_config):
     bad_game = "../bad_game"
     bad_mod = "bad_mod"
     
-    res1 = format_json_files_tool(bad_game, bad_mod, "origin")
-    assert "Invalid path identifier detected" in res1
+    with pytest.raises(PermissionError) as excinfo1:
+        format_json_files_tool(bad_game, bad_mod, "origin")
+    assert "Invalid path identifier detected" in str(excinfo1.value)
     
-    res2 = git_diff_check_tool(bad_game, bad_mod, need_origin=True, need_ir_origin=False)
-    assert "Invalid path identifier detected" in res2
+    with pytest.raises(PermissionError) as excinfo2:
+        git_diff_check_tool(bad_game, bad_mod, need_origin=True, need_ir_origin=False)
+    assert "Invalid path identifier detected" in str(excinfo2.value)
     
-    res3 = git_commit_version_tool(bad_game, bad_mod, version="1.0.0", message="msg")
-    assert "Invalid path identifier detected" in res3
+    with pytest.raises(PermissionError) as excinfo3:
+        git_commit_version_tool(bad_game, bad_mod, version="1.0.0", message="msg")
+    assert "Invalid path identifier detected" in str(excinfo3.value)
 
     # 传入含有 "." 或相对指示符号的非法参数
-    res_dot = format_json_files_tool(".", "test_mod", "origin")
-    assert "Invalid path identifier detected" in res_dot
+    with pytest.raises(PermissionError) as excinfo_dot:
+        format_json_files_tool(".", "test_mod", "origin")
+    assert "Invalid path identifier detected" in str(excinfo_dot.value)
 
 
 def test_server_concurrency_lock(setup_mcp_config):
