@@ -111,13 +111,17 @@ def test_server_path_traversal_protection(setup_mcp_config):
     bad_mod = "bad_mod"
     
     res1 = format_json_files_tool(bad_game, bad_mod, "origin")
-    assert "Path traversal detected" in res1
+    assert "Invalid path identifier detected" in res1
     
     res2 = git_diff_check_tool(bad_game, bad_mod, need_origin=True, need_ir_origin=False)
-    assert "Path traversal detected" in res2
+    assert "Invalid path identifier detected" in res2
     
     res3 = git_commit_version_tool(bad_game, bad_mod, version="1.0.0", message="msg")
-    assert "Path traversal detected" in res3
+    assert "Invalid path identifier detected" in res3
+
+    # 传入含有 "." 或相对指示符号的非法参数
+    res_dot = format_json_files_tool(".", "test_mod", "origin")
+    assert "Invalid path identifier detected" in res_dot
 
 
 def test_server_concurrency_lock(setup_mcp_config):

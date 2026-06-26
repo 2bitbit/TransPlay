@@ -193,3 +193,24 @@ def test_squash_history_detached_head(tmp_path):
     
     # 验证当前 HEAD 的 tree 指向最新一次提交 file_4.txt 的内容
     assert (repo_path / "file_4.txt").read_text() == "content 4"
+
+def test_squash_history_ultra_long_message(tmp_path):
+    repo_path = tmp_path / "test_repo_long_msg"
+    repo_path.mkdir()
+
+    # 初始化
+    git_diff_check(str(repo_path), need_origin=False, need_ir_origin=False)
+    
+    # 提交 4 个 commit，其中一个包含大于 10000 字符的超长消息（模拟在 Windows 突破 8191 字符上限）
+    long_msg = "A" * 10000
+    for i in range(1, 5):
+        (repo_path / f"file_{i}.txt").write_text(f"content {i}")
+        msg = long_msg if i == 3 else f"Commit {i}"
+        git_commit_version(str(repo_path), version=f"1.0.{i}", message=msg)
+        
+    # 运行 squash_history 裁剪至 3 个历史
+    squash_history(str(repo_path), max_commits=3)
+    
+    # 验证裁剪成功，历史提交被削减到 3
+    new_commits = run_git(repo_path, ["log", "--format=%H"]).splitlines()
+    assert len(new_commits) == 3

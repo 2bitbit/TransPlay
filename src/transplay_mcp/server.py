@@ -85,20 +85,32 @@ def get_max_commits() -> str:
 
 
 # 并发控制锁机制：针对每个模组仓库拥有独立的排他锁，防止高并发导致 Git 冲突
-_repo_locks: dict[tuple[str, str], threading.Lock] = {}
+# 锁的字典键改为规范化后的绝对物理路径字符串，保证同一物理仓库在并发时绝对共享同一个锁
+_repo_locks: dict[str | tuple[str, str], threading.Lock] = {}
 _repo_locks_lock = threading.Lock()
 
 
 def _get_repo_lock(game_id: str, mod_id: str) -> threading.Lock:
-    key = (game_id, mod_id)
+    assert vault_path is not None
+    try:
+        resolved_repo = _safe_resolve_path(vault_path, game_id, mod_id)
+        key = resolved_repo.resolve().as_posix()
+    except Exception:
+        key = (game_id, mod_id)
+
     with _repo_locks_lock:
         if key not in _repo_locks:
             _repo_locks[key] = threading.Lock()
         return _repo_locks[key]
 
 
-# 安全路径边界检查，防止 game_id、mod_id、sub_dir 包含 "../" 进行路径穿越攻击
+# 安全路径边界检查，防止 game_id、mod_id、sub_dir 进行路径穿越或根目录污染
 def _safe_resolve_path(base_path: Path, *parts: str) -> Path:
+    # 强校验参数纯净度，禁止相对路径标识 (如 . 或 ..) 以及任何路径斜杠干扰
+    for part in parts:
+        if part in (".", "..") or "/" in part or "\\" in part:
+            raise PermissionError(f"Invalid path identifier detected: '{part}'")
+
     # 结合 parts 生成路径，resolve 消除相对路径
     resolved = (base_path / Path(*parts)).resolve()
     # 强校验是否仍在 base_path 目录下
