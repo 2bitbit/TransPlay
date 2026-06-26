@@ -10,6 +10,218 @@ version: "1.0.0"
 
 ---
 
+## 工作流全景图
+
+```mermaid
+flowchart TD
+    %% 样式定义
+    classDef startEnd fill:#f5f5f5,stroke:#333,stroke-width:2px,color:#333;
+    classDef mainFlow fill:#e3f2fd,stroke:#1565c0,stroke-width:2px,color:#0d47a1;
+    classDef gitTool fill:#ede7f6,stroke:#5e35b1,stroke-width:2px,color:#311b92;
+    classDef textStream fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#1b5e20;
+    classDef binStream fill:#fff3e0,stroke:#ef6c00,stroke-width:2px,color:#e65100;
+    classDef warnNode fill:#ffebee,stroke:#c62828,stroke-width:2px,color:#b71c1c;
+
+    %% 全局红线规约提示
+    subgraph RedLines [⚠️ 汉化红线规约 - 全局强约束]
+        RL1["1. 拒绝旁路挂载设计：必须直接暴力替换源码/配置文件"]
+        RL2["2. 100百分之 同构交付：translated 结构与 origin 完全同构，一键覆盖"]
+        RL3["3. 严禁漏翻与偷懒：全量汉化包括 CSV、LUA 等，严禁漏翻任何文件"]
+    end
+
+    %% 节点定义
+    Start(["开始：汉化/更新请求"])
+    
+    subgraph config_check [1. 启动探活与配置校验]
+        ReadConfig["读取配置: vault_path & max_commits"]
+        CheckConfig{"环境变量配置<br/>是否完整?"}
+        Fail["探活失败：直接强退<br/>引导用户补全env配置"]
+    end
+
+    subgraph route_decide [2. 路由分发与决策]
+        CheckExist["检查 origin/ 和 translated/<br/>物理目录状态及版本号"]
+        DecideRule{"状态决策机制"}
+        
+        BranchC["分支 C：无需更新<br/>exist_t 存在 且 version_t >= version_o"]
+        BranchD["异常 / Fallback 分支<br/>处于未知异常状态"]
+        
+        PromptC["提示已翻译<br/>告知译文相对路径"]
+        InteractD["主动与用户进行<br/>双向交流沟通"]
+    end
+
+    Start --> ReadConfig
+    ReadConfig --> CheckConfig
+    CheckConfig -- 否 --> Fail
+    CheckConfig -- 是 --> CheckExist
+    CheckExist --> DecideRule
+
+    DecideRule -- 分支 C --> BranchC
+    DecideRule -- 异常 --> BranchD
+    BranchC --> PromptC
+    BranchD --> InteractD
+    PromptC --> End(["结束"])
+    InteractD --> End
+    Fail --> End
+
+    %% 核心分支 A 与 B 的分流
+    DecideRule -- 分支 A --> BranchA["分支 A：全新翻译流程<br/>exist_t 不存在"]
+    DecideRule -- 分支 B --> BranchB["分支 B：增量更新流程<br/>exist_t 存在 且 version_t < version_o"]
+
+    subgraph branch_a [3. 全新翻译流程]
+        WriteO["源码写入: 原始模组写入 origin/"]
+        GitInit["仓库初始化: 调用 git_diff_check_tool<br/>need_origin=True, need_ir_origin=False"]
+        Classify["文件分类: 扫描并按类型分流"]
+
+        %% 媒体分支
+        MediaBranch["无需翻译的媒体类"]
+        CopyMedia["主代理直接同步/拷贝至 translated/"]
+
+        %% 文本分支
+        TextBranch["需翻译的纯文本源文件"]
+        CreateTextAgent["创建一级子代理: 文本翻译"]
+        SpawnTextSub["调用批量二级子代理: 并行翻译"]
+        WriteTextT["翻译输出至 translated/"]
+
+        %% 二进制分支
+        BinBranch["需翻译的二进制源文件"]
+        CreateBinAgent["创建一级子代理: 二进制解析"]
+        Decompile["反编译序列化为 JSON"]
+        WriteSpec["建立并写入 ir/spec.md 描述映射"]
+        WriteIRO["输出序列化 JSON 至 ir/origin/"]
+        FormatIRO["强格式化 ir/origin JSON<br/>调用 format_json_files_tool"]
+        SpawnBinSub["调用批量二级子代理: 并行翻译 JSON"]
+        WriteIRT["翻译输出至 ir/translated/"]
+        CompileBin["根据 spec.md 反序列化封包生成二进制"]
+        WriteBinT["回填输出至 translated/"]
+
+        FormatAllA["译文强格式化<br/>对 translated & ir/translated 的 JSON 调用 format_json_files_tool"]
+        CommitA["提交版本固化: 调用 git_commit_version_tool<br/>服务端自动裁剪 linear 历史"]
+    end
+
+    BranchA --> WriteO
+    WriteO --> GitInit
+    GitInit --> Classify
+    
+    Classify --> MediaBranch
+    MediaBranch --> CopyMedia
+    
+    Classify --> TextBranch
+    TextBranch --> CreateTextAgent
+    CreateTextAgent --> SpawnTextSub
+    SpawnTextSub --> WriteTextT
+    
+    Classify --> BinBranch
+    BinBranch --> CreateBinAgent
+    CreateBinAgent --> Decompile
+    Decompile --> WriteSpec
+    WriteSpec --> WriteIRO
+    WriteIRO --> FormatIRO
+    FormatIRO --> SpawnBinSub
+    SpawnBinSub --> WriteIRT
+    WriteIRT --> CompileBin
+    CompileBin --> WriteBinT
+
+    CopyMedia --> FormatAllA
+    WriteTextT --> FormatAllA
+    WriteBinT --> FormatAllA
+    FormatAllA --> CommitA
+
+    subgraph branch_b [4. 增量更新流程]
+        WriteO_B["新文件覆盖: 覆盖写入 origin/"]
+        DiffB["首次 Diff: 调用 git_diff_check_tool<br/>need_origin=True, need_ir_origin=False"]
+        ClassifyB["差异分类: 区分变动/新增文件类型"]
+
+        %% 无变化分支
+        NoChangeB["无变化文件"]
+        IgnoreB["忽略不作处理"]
+
+        %% 媒体与无需翻译分支 (已补全)
+        MediaBranchB["无需翻译但新增/变动的媒体资产"]
+        CopyMediaB["主代理直接同构同步/拷贝至 translated/"]
+
+        %% 文本增量
+        TextBranchB["需更新的纯文本源文件"]
+        CreateTextAgentB["创建一级子代理: 增量文本"]
+        SpawnTextSubB["批量二级子代理: 针对 Diff 变化文件/行翻译"]
+        WriteTextT_B["写入更新至 translated/"]
+
+        %% 二进制增量
+        BinBranchB["需更新的二进制源文件"]
+        CreateBinAgentB["创建一级子代理: 增量二进制"]
+        DecompileB["反编译新版本输出 JSON 至 ir/origin/"]
+        FormatIRO_B["格式化新版 ir/origin JSON<br/>调用 format_json_files_tool"]
+        DiffIR_B["二次 Diff: 调用 git_diff_check_tool<br/>need_origin=False, need_ir_origin=True"]
+        SpawnBinSubB["批量二级子代理: 仅翻译 JSON 增量差异键值对"]
+        WriteIRT_B["合并写入至 ir/translated/"]
+        CompileBinB["根据 spec.md 反序列化封包生成二进制"]
+        WriteBinT_B["回填输出至 translated/"]
+
+        FormatAllB["译文强格式化<br/>对 translated & ir/translated 新生成/修改的 JSON 调用 format_json_files_tool"]
+        CommitB["提交版本固化: 调用 git_commit_version_tool"]
+    end
+
+    BranchB --> WriteO_B
+    WriteO_B --> DiffB
+    DiffB --> ClassifyB
+    
+    ClassifyB --> NoChangeB
+    NoChangeB --> IgnoreB
+    
+    ClassifyB --> MediaBranchB
+    MediaBranchB --> CopyMediaB
+    
+    ClassifyB --> TextBranchB
+    TextBranchB --> CreateTextAgentB
+    CreateTextAgentB --> SpawnTextSubB
+    SpawnTextSubB --> WriteTextT_B
+    
+    ClassifyB --> BinBranchB
+    BinBranchB --> CreateBinAgentB
+    CreateBinAgentB --> DecompileB
+    DecompileB --> FormatIRO_B
+    FormatIRO_B --> DiffIR_B
+    DiffIR_B --> SpawnBinSubB
+    SpawnBinSubB --> WriteIRT_B
+    WriteIRT_B --> CompileBinB
+    CompileBinB --> WriteBinT_B
+
+    CopyMediaB --> FormatAllB
+    WriteTextT_B --> FormatAllB
+    WriteBinT_B --> FormatAllB
+    FormatAllB --> CommitB
+
+    subgraph clean_up [5. 最终整理与用户协商流程]
+        Consult["双向沟通协商: 询问后置整理操作"]
+        OptA["选择 A: 清理缓存<br/>Opt-in 授权"]
+        OptB["选择 B: 覆盖实装<br/>Opt-in 授权"]
+        CleanCache["清理外部临时无用目录<br/>友情提醒原始英文与译文已安全备份"]
+        Deploy["协助复制 translated/ 汉化成果到游戏本地/Steam创意工坊路径"]
+    end
+
+    CommitA --> Consult
+    CommitB --> Consult
+    
+    Consult --> OptA
+    Consult --> OptB
+    
+    OptA --> CleanCache
+    OptB --> Deploy
+    
+    CleanCache --> End
+    Deploy --> End
+    IgnoreB --> End
+
+    %% 显式类样式绑定
+    class Start,End startEnd;
+    class ReadConfig,CheckConfig,CheckExist,DecideRule,BranchC,PromptC,BranchA,BranchB,WriteO,Classify,MediaBranch,CopyMedia,WriteO_B,ClassifyB,NoChangeB,IgnoreB,MediaBranchB,CopyMediaB,Consult,OptA,OptB,CleanCache,Deploy mainFlow;
+    class GitInit,FormatIRO,FormatAllA,CommitA,DiffB,FormatIRO_B,DiffIR_B,FormatAllB,CommitB gitTool;
+    class TextBranch,CreateTextAgent,SpawnTextSub,WriteTextT,TextBranchB,CreateTextAgentB,SpawnTextSubB,WriteTextT_B textStream;
+    class BinBranch,CreateBinAgent,Decompile,WriteSpec,WriteIRO,SpawnBinSub,WriteIRT,CompileBin,WriteBinT,BinBranchB,CreateBinAgentB,DecompileB,SpawnBinSubB,WriteIRT_B,CompileBinB,WriteBinT_B binStream;
+    class Fail,BranchD,InteractD warnNode;
+```
+
+---
+
 ## ⚠️ 汉化红线规约 (防自作聪明/防偷懒)
 
 为确保模组汉化质量，执行本工作流的 Agent 必须无条件遵守以下三条铁律：
