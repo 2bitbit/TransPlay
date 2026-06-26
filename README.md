@@ -30,7 +30,7 @@ TransPlay MCP 是一个面向 AI 智能体（Agent）的、用于辅助游戏 Mo
 ### Installation (安装)
 `git pull` 拉取后 `uv sync`。
 
-然后配置1个 `SKILL.md` + harness 框架的 MCP 配置。
+然后配置1个 `SKILL.md`（在 `transplay-localization/` 下）+ harness 框架的 MCP 配置。
 
 ### Local Configuration & MCP Client Setup (本地配置与集成)
 本服务器运行前必须配置以下两个核心参数。它们都会在启动时进行自检（Fast-fail），如果检测不到或配置不合法，服务器将直接崩溃退出：
@@ -76,3 +76,12 @@ uv run ruff check src/
 # 严格类型安全检查
 uv run pyright src/
 ```
+
+## 附：如何畅享天下好玩
+- 搜 mod：浏览器用沉浸式翻译等插件，浏览创意工坊或nexus等mod网站
+- 译 mod：使用 agent，利用 TransPlay MCP 轻松管理汉化
+
+
+<p style="text-align: center; font-size: 12px; color: #666666;">
+  ( •̀ ω •́ )y     No Trans, No Play. Trans here, Play here. Trans for Play, Play for Trans. Trans me, Play me. I Trans, I play.              ٩(｡・ω・｡)﻿و
+</p>
