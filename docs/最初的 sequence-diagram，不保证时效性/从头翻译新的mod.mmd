@@ -1,0 +1,62 @@
+sequenceDiagram
+    actor user 
+    actor agent
+    participant origin as TransPlayVault/<game>/<mod>/origin/
+    participant ir as TransPlayVault/<game>/<mod>/ir/
+    participant translated as TransPlayVault/<game>/<mod>/translated/
+    participant mcp
+
+    user ->> agent: 请求翻译某些 mod
+    agent ->>origin: 直接把用户提供的mod写入到这里
+
+
+    note over user,mcp: 文件分类环节
+    agent ->> origin: 请求所有文件的列表（比如ls -r）
+    origin -->> agent: 返回所有文件的列表
+    agent ->> agent: 执行分类：无需翻译（如音频、图片、视频）；需翻译的纯文本源文件；需翻译的二进制源文件
+
+
+    note over user,mcp: 翻译，获取翻译结果
+    par  需翻译的纯文本源文件
+        create participant sub_agent_1
+        agent ->> sub_agent_1: 创建一级子代理
+
+        sub_agent_1 ->> translated: 使用批量的二级子代理，并行翻译并输出（保持原目录结构）
+
+        destroy sub_agent_1
+        sub_agent_1 -->> agent: OK
+        
+    and 需翻译的二进制源文件（若含有的话）
+        create participant sub_agent_2
+        agent ->> sub_agent_2: 创建一级子代理
+
+        note over sub_agent_2,ir: 序列化
+        sub_agent_2 ->> ir: 自行设计 json 序列化方案（无需关心排序），建立 ir/spec.md 以便维持对同一份二进制文件的序列化结果的确定性。并输出序列化结果json到 ir/origin（保持原目录结构）。
+        sub_agent_2 ->> mcp: git 友好化(dir_path=ir/origin)
+        mcp ->>ir: 对ir/origin下的所有文件进行git友好化（例如json确定性强排序、格式化）
+        mcp -->> sub_agent_2: OK
+
+        note over sub_agent_2,ir: 翻译ir/origin
+        sub_agent_2 ->> ir: 使用批量的二级子代理，并行翻译并输出到ir/translated（保持原目录结构）
+
+        note over sub_agent_2,ir: 反序列化
+        sub_agent_2 ->> ir: 获取ir/translated所有内容
+        ir -->> sub_agent_2: 返回ir/translated所有内容
+        sub_agent_2 ->> translated: 依据ir/spec.md，反序列化ir/translated并输出
+
+        destroy sub_agent_2
+        sub_agent_2 -->> agent: OK
+
+    and 无需翻译的文件
+        agent ->> translated: 主代理在此期间，对无需翻译的所有其他文件执行增删查改（保持原目录结构）
+    end
+
+
+    note over user,mcp: 对所有文件执行git管理（要求working tree clean）
+    agent ->> origin: 提交commit，要求包含版本号
+    agent ->> ir: 检查是否需要git管理
+    agent ->> translated: 提交commit，要求包含版本号
+
+
+    note over user,mcp: 最终操作
+    agent ->> agent: 执行《最终整理.mmd》

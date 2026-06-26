@@ -1,0 +1,24 @@
+sequenceDiagram
+    actor user 
+    actor agent
+    participant origin as TransPlayVault/<game>/<mod>/origin/
+    %% ir/ 下包含 origin/、translated/、spec.md
+    participant ir as TransPlayVault/<game>/<mod>/ir/ 
+    participant translated as TransPlayVault/<game>/<mod>/translated/
+    %% 所有的名为 origin/、translated/的目录，对于任意级别子目录，里面存在的任何文件，其目录结构必须保持与原目录结构完全一致。
+
+    user ->> agent: 请求翻译某些 mod
+
+    note over user,translated: 对用户的请求进行审查
+    agent ->> origin: 检查是否已经存在该mod (记作exist_o)，及其版本vesion_o
+    agent ->> translated: 检查是否已经存在该mod (记作exist_t)，及其版本version_t
+    alt exist_t == 0 
+        agent -->>agent: 执行《从头翻译新的mod.mmd》
+    else exist_t== 1 && exist_o == 1 &&  version_t < version_o
+        agent -->>agent: 执行《更新现有mod的翻译.mmd》
+    else exist_t== 1 && exist_o == 1 && version_t >= version_o
+        agent -->> user: 提示用户已经翻译过这个mod，可以在哪个路径下查看。
+    else fallback
+        agent ->> agent: 检查一下是什么情况
+        agent <<->> user: 与用户进行交流沟通
+    end
