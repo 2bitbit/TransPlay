@@ -24,6 +24,7 @@ def _run_git(
     full_cmd = ["git"] + override_config + args
     logger.debug(f"[_run_git] Executing command: {' '.join(full_cmd)} in CWD: {repo_path}")
     start_time = time.time()
+    stdin_val = subprocess.DEVNULL if stdin_data is None else None
     try:
         result = subprocess.run(
             full_cmd,
@@ -33,6 +34,7 @@ def _run_git(
             encoding="utf-8",
             errors="replace",
             input=stdin_data,
+            stdin=stdin_val,
             timeout=timeout,
         )
         elapsed = time.time() - start_time
