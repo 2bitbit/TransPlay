@@ -170,7 +170,7 @@ flowchart TD
 
     %% 显式类样式绑定
     class Start,End startEnd;
-    class ReadConfig,CheckConfig,CheckExist,DecideRule,BranchC,PromptC,BranchA,BranchB,WriteO,WriteO_B,Consult,OptA,OptB,CleanCache,Deploy mainFlow;
+    class ReadConfig,CheckConfig,WriteFiles,RequestType,SingleRoute,BatchRoute,CheckExist,ScanAll,DecideRule,BranchC,PromptC,BranchA,BranchB,InitRepo,Consult,OptA,OptB,CleanCache,Deploy mainFlow;
     class CreateAgentA,ClassifyA,TranslateTextA,TranslateBinA,SyncMediaA,CreateAgentB,DiffB,ClassifyB,IgnoreB,CopyMediaB,TranslateTextB,TranslateBinB subAgentFlow;
     class FormatAllA,CommitA,FormatAllB,CommitB gitTool;
     class Fail,BranchD,InteractD,RL1,RL2,RL3,RL4 warnNode;
