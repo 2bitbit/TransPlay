@@ -211,6 +211,74 @@ def git_commit_version_tool(
             f"(limit: {max_commits})."
         )
 
+
+@mcp.tool()
+def get_all_mods_status_tool() -> str:
+    """获取所有被纳入管理的 Mod 的状态列表，识别待翻译、待更新或已是最新的 Mod。
+
+    返回格式化好的列表字符串，并在最后提供专属的“只包含 origin 但未被翻译”的 Summary 检查说明行。
+    """
+    assert vault_path is not None
+    if not vault_path.exists():
+        return "Vault path does not exist."
+
+    mods_status = []
+    only_origin_mods = []
+
+    try:
+        games = sorted([d for d in vault_path.iterdir() if d.is_dir() and not d.name.startswith(".")])
+    except Exception as e:
+        logger.error(f"[get_all_mods_status_tool] Failed to list vault: {e}")
+        return f"Error listing vault path: {e}"
+
+    for game_dir in games:
+        game_id = game_dir.name
+        try:
+            mods = sorted([d for d in game_dir.iterdir() if d.is_dir() and not d.name.startswith(".")])
+        except Exception as e:
+            logger.warning(f"[get_all_mods_status_tool] Failed to list mods for game {game_id}: {e}")
+            continue
+
+        for mod_dir in mods:
+            mod_id = mod_dir.name
+            origin_path = mod_dir / "origin"
+            translated_path = mod_dir / "translated"
+
+            # 状态判定逻辑
+            if not origin_path.exists():
+                # 无 origin 目录的文件夹，视作无效或尚未初始化的非 Mod 物理空间，直接跳过
+                continue
+
+            if not translated_path.exists():
+                status = "Need Translation (New origin only)"
+                only_origin_mods.append(f"{game_id}/{mod_id}")
+            else:
+                # 若 translated 已存在，则通过底层 Git 比对 origin 的工作区与 HEAD 差异
+                # 为防止并发读写引发 index 冲突，加写该 Mod 对应的本地读写锁
+                lock = _get_repo_lock(game_id, mod_id)
+                with lock:
+                    try:
+                        diff = git_diff_check(str(mod_dir), need_origin=True, need_ir_origin=False)
+                        if diff.strip():
+                            status = "Need Update"
+                        else:
+                            status = "Up to date"
+                    except Exception as e:
+                        logger.warning(f"[get_all_mods_status_tool] Git diff check failed for {game_id}/{mod_id}: {e}")
+                        status = f"Git Error ({e})"
+
+            mods_status.append(f"- [{game_id}] {mod_id}: {status}")
+
+    lines = []
+    if mods_status:
+        lines.extend(mods_status)
+    else:
+        lines.append("No managed mods found.")
+
+    lines.append(f"Check Summary: The following mods only have 'origin' directory and have not been translated yet: {only_origin_mods}")
+    return "\n".join(lines)
+
+
 def main() -> None:
     mcp.run()
 

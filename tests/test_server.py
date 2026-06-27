@@ -162,3 +162,49 @@ def test_server_concurrency_lock(setup_mcp_config):
     
     # 验证是否都顺利返回（没有爆出 index.lock 冲突引发的失败）
     assert len(results) == 2
+
+
+def test_server_all_mods_status_tool(setup_mcp_config):
+    from transplay_mcp.server import (
+        get_all_mods_status_tool,
+        git_commit_version_tool,
+    )
+    
+    vault_dir = setup_mcp_config
+    
+    # 1. 构造一个全新的 Mod (只有 origin，无 translated)
+    game_id = "noita"
+    mod_new = "mod_new"
+    (vault_dir / game_id / mod_new / "origin").mkdir(parents=True, exist_ok=True)
+    (vault_dir / game_id / mod_new / "origin" / "data.txt").write_text("hello")
+
+    # 2. 构造一个 Up to date 的 Mod (已翻译且无差异)
+    mod_clean = "mod_clean"
+    (vault_dir / game_id / mod_clean / "origin").mkdir(parents=True, exist_ok=True)
+    (vault_dir / game_id / mod_clean / "origin" / "data.txt").write_text("hello")
+    # 初始化并 commit 提交版本以确立 HEAD
+    git_commit_version_tool(game_id, mod_clean, version="1.0.0", message="init")
+    # 确保 translated 文件夹存在
+    (vault_dir / game_id / mod_clean / "translated").mkdir(parents=True, exist_ok=True)
+
+    # 3. 构造一个 Need Update 的 Mod (已翻译但 origin 工作区发生了变更)
+    mod_dirty = "mod_dirty"
+    (vault_dir / game_id / mod_dirty / "origin").mkdir(parents=True, exist_ok=True)
+    (vault_dir / game_id / mod_dirty / "origin" / "data.txt").write_text("hello")
+    git_commit_version_tool(game_id, mod_dirty, version="1.0.0", message="init")
+    (vault_dir / game_id / mod_dirty / "translated").mkdir(parents=True, exist_ok=True)
+    
+    # 写入新内容模拟覆盖了新原版文件
+    (vault_dir / game_id / mod_dirty / "origin" / "data.txt").write_text("hello new version")
+
+    # 4. 调用 get_all_mods_status_tool 测试结果
+    res = get_all_mods_status_tool()
+    
+    # 检查状态输出包含这三个 mod
+    assert f"- [{game_id}] {mod_new}: Need Translation (New origin only)" in res
+    assert f"- [{game_id}] {mod_clean}: Up to date" in res
+    assert f"- [{game_id}] {mod_dirty}: Need Update" in res
+    
+    # 检查最后的 Check Summary 检查说明行是否正确捕获了 mod_new
+    assert f"Check Summary: The following mods only have 'origin' directory and have not been translated yet: ['{game_id}/{mod_new}']" in res
+
