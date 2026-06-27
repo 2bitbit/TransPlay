@@ -37,6 +37,10 @@ flowchart TD
         Fail["探活失败：直接强退<br/>引导用户补全env配置"]
     end
 
+    subgraph pre_write [主代理物理前置准备]
+        WriteFiles["主代理覆盖写入：<br/>将待处理 Mod 的英文原版文件写入/覆盖写入到对应的 origin/ 目录下"]
+    end
+
     subgraph route_decide [2. 路由分发与决策]
         RequestType{"请求场景类型"}
         
@@ -58,7 +62,8 @@ flowchart TD
     Start --> ReadConfig
     ReadConfig --> CheckConfig
     CheckConfig -- 否 --> Fail
-    CheckConfig -- 是 --> RequestType
+    CheckConfig -- 是 --> WriteFiles
+    WriteFiles --> RequestType
 
     RequestType -- 单 Mod --> SingleRoute
     RequestType -- 批量/巡检 --> BatchRoute
@@ -77,12 +82,12 @@ flowchart TD
     InteractD --> End
     Fail --> End
 
-    %% 核心分支 A 与 B 的分流与批量前置准备
-    DecideRule -- 分支 A --> BranchA["分支 A：全新翻译流程<br/>物理目录不存在(见都没见过)<br/>或仅有 origin 无 translated"]
+    %% 核心分支 A 与 B 的分流
+    DecideRule -- 分支 A --> BranchA["分支 A：全新翻译流程<br/>物理目录仅存在 origin 无 translated"]
     DecideRule -- 分支 B --> BranchB["分支 B：增量更新流程<br/>translated 存在 且 检测到<br/>origin 工作区有新覆盖差异"]
 
     subgraph branch_a [3. 全新翻译流程]
-        WriteO["主代理批量前置物理准备：<br/>将原始模组英文文件写入 origin/<br/>并调用 git_diff_check_tool 初始化仓库底座"]
+        InitRepo["主代理初始化仓库：<br/>调用 git_diff_check_tool(need_origin=True) 初始化仓库底座，生成 Initial Commit"]
         
         CreateAgentA["分批并发分发（每批 2~5 个）<br/>为主代理唤醒该 Mod 唯一的【Mod 翻译子代理】"]
         
@@ -98,8 +103,8 @@ flowchart TD
         AgentReturnA["本批次子代理执行成功返回并销毁"]
     end
 
-    BranchA --> WriteO
-    WriteO --> CreateAgentA
+    BranchA --> InitRepo
+    InitRepo --> CreateAgentA
     CreateAgentA --> ClassifyA
     
     ClassifyA --> TranslateTextA
@@ -113,8 +118,6 @@ flowchart TD
     CommitA --> AgentReturnA
 
     subgraph branch_b [4. 增量更新流程]
-        WriteO_B["主代理批量前置物理准备：<br/>将新版模组覆盖写入 origin/"]
-        
         CreateAgentB["分批并发分发（每批 2~5 个）<br/>为主代理唤醒该 Mod 唯一的【Mod 增量翻译子代理】"]
         
         subgraph sub_agent_b [子代理内部执行：增量更新]
@@ -131,8 +134,7 @@ flowchart TD
         AgentReturnB["本批次子代理执行成功返回并销毁"]
     end
 
-    BranchB --> WriteO_B
-    WriteO_B --> CreateAgentB
+    BranchB --> CreateAgentB
     CreateAgentB --> DiffB
     DiffB --> ClassifyB
     
