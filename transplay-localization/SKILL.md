@@ -202,7 +202,7 @@ flowchart TD
 1. **读取 Resource 资源**：
    - 读取 `transplay://config/vault_path` 获取模组仓库的存放目录。
    - 读取 `transplay://config/max_commits` 获取 Git 历史剪枝的提交上限。
-   - 读取 `transplay://config/workshop_path` 获取本地 Steam 创意工坊的存放目录（可选配置，若未注入则返回空字符串，由主代理自主决定是否跳过创意工坊覆盖流程）。
+   - 读取 `transplay://config/steam_workshop_path` 获取本地 Steam 创意工坊的存放目录（可选配置，若未注入则返回空字符串，由主代理自主决定是否跳过创意工坊覆盖流程）。
 2. **启动异常警示**：
    - 依据环境变量 Fast-fail 设计，若客户端未配置对应的环境变量，MCP 服务端将在模块顶级加载时直接强退。若发生连接 MCP 失败，Agent 应当优先引导并协助用户检查并补全客户端 MCP 配置文件中的 `env` block。
 3. **多 Mod 状态巡检 (应对批量汉化场景)**：

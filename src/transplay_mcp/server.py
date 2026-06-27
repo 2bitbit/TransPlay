@@ -23,7 +23,7 @@ is_testing = os.environ.get("TRANSPLAY_TESTING") == "1"
 # 1. 直接从环境变量（由客户端/Harness从全局配置中读取并注入）中获取参数
 vault_path_str = os.environ.get("TransPlayVault")
 max_commits_str = os.environ.get("TransPlayMaxCommits")
-workshop_path_str = os.environ.get("TransPlayWorkshopPath")
+steam_workshop_path_str = os.environ.get("TransPlaySteamWorkshopPath")
 
 # 2. 应用并校验配置参数
 vault_path: Path | None = None
@@ -71,9 +71,9 @@ else:
         sys.exit(1)
 
 # Steam 创意工坊可选物理路径（为空即忽略，不进行 Fast-fail 强退校验）
-workshop_path: Path | None = None
-if workshop_path_str:
-    workshop_path = Path(workshop_path_str)
+steam_workshop_path: Path | None = None
+if steam_workshop_path_str:
+    steam_workshop_path = Path(steam_workshop_path_str)
 
 
 # 3. 注册并暴露 Resource 资源
@@ -91,12 +91,12 @@ def get_max_commits() -> str:
     return str(max_commits)
 
 
-@mcp.resource("transplay://config/workshop_path")
-def get_workshop_path() -> str:
+@mcp.resource("transplay://config/steam_workshop_path")
+def get_steam_workshop_path() -> str:
     """获取此服务端管理的 Steam 创意工坊的绝对物理路径，若未配置则返回空字符串。"""
-    if workshop_path is None:
+    if steam_workshop_path is None:
         return ""
-    return str(workshop_path.absolute())
+    return str(steam_workshop_path.absolute())
 
 
 # 并发控制锁机制：针对每个模组仓库拥有独立的排他锁，防止高并发导致 Git 冲突

@@ -38,7 +38,7 @@ TransPlay MCP 是一个面向 AI 智能体（Agent）的、用于辅助游戏 Mo
 2. `TransPlayMaxCommits`：模组版本仓库中限制的 Git 最大历史提交总数（必须是 $\ge 2$ 的正整数，如推荐配置为 `3`）。
 
 此外，还支持以下可选参数（若检测不到或为空，则静默忽略，不进行 Fast-fail 强退校验）：
-3. `TransPlayWorkshopPath`（可选）：本地 Steam 创意工坊 content 目录的物理路径，配置后可用于协助大模型实装覆盖。
+3. `TransPlaySteamWorkshopPath`（可选）：本地 Steam 创意工坊 content 目录的物理路径，配置后可用于协助大模型实装覆盖。
 
 ### 配置示例
 向你的 harness 对应的 MCP 配置文件（如`mcp_config.json`），写入类似下面这种意思的配置：
@@ -55,7 +55,7 @@ TransPlay MCP 是一个面向 AI 智能体（Agent）的、用于辅助游戏 Mo
       "env": {
         "TransPlayVault": "D:/TransPlayVault",
         "TransPlayMaxCommits": "3",
-        "TransPlayWorkshopPath": "C:/Program Files (x86)/Steam/steamapps/workshop/content"
+        "TransPlaySteamWorkshopPath": "C:/Program Files (x86)/Steam/steamapps/workshop/content"
       }
     }
   }
