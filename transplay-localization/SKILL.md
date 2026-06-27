@@ -27,6 +27,7 @@ flowchart TD
         RL1["1. 拒绝旁路挂载设计：必须直接暴力替换源码/配置文件"]
         RL2["2. 100百分之 同构交付：translated 结构与 origin 完全同构，一键覆盖"]
         RL3["3. 严禁漏翻与偷懒：全量汉化包括 CSV、LUA 等，严禁漏翻任何文件"]
+        RL4["4. 严禁多 Mod 并行与单文件单代理：主代理串行调度多 Mod，父代理合理打包任务"]
     end
 
     %% 节点定义
@@ -79,7 +80,7 @@ flowchart TD
         %% 文本分支
         TextBranch["需翻译的纯文本源文件"]
         CreateTextAgent["创建一级子代理: 文本翻译"]
-        SpawnTextSub["调用批量二级子代理: 并行翻译"]
+        SpawnTextSub["合理打包并分批调用二级子代理: 并行翻译"]
         WriteTextT["翻译输出至 translated/"]
 
         %% 二进制分支
@@ -89,7 +90,7 @@ flowchart TD
         WriteSpec["建立并写入 ir/spec.md 描述映射"]
         WriteIRO["输出序列化 JSON 至 ir/origin/"]
         FormatIRO["强格式化 ir/origin JSON<br/>调用 format_json_files_tool"]
-        SpawnBinSub["调用批量二级子代理: 并行翻译 JSON"]
+        SpawnBinSub["合理打包并分批调用二级子代理: 并行翻译 JSON"]
         WriteIRT["翻译输出至 ir/translated/"]
         CompileBin["根据 spec.md 反序列化封包生成二进制"]
         WriteBinT["回填输出至 translated/"]
@@ -142,7 +143,7 @@ flowchart TD
         %% 文本增量
         TextBranchB["需更新的纯文本源文件"]
         CreateTextAgentB["创建一级子代理: 增量文本"]
-        SpawnTextSubB["批量二级子代理: 针对 Diff 变化文件/行翻译"]
+        SpawnTextSubB["合理打包并分批调用二级子代理: 针对 Diff 变化文件/行翻译"]
         WriteTextT_B["写入更新至 translated/"]
 
         %% 二进制增量
@@ -151,7 +152,7 @@ flowchart TD
         DecompileB["反编译新版本输出 JSON 至 ir/origin/"]
         FormatIRO_B["格式化新版 ir/origin JSON<br/>调用 format_json_files_tool"]
         DiffIR_B["二次 Diff: 调用 git_diff_check_tool<br/>need_origin=False, need_ir_origin=True"]
-        SpawnBinSubB["批量二级子代理: 仅翻译 JSON 增量差异键值对"]
+        SpawnBinSubB["合理打包并分批调用二级子代理: 仅翻译 JSON 增量差异键值对"]
         WriteIRT_B["合并写入至 ir/translated/"]
         CompileBinB["根据 spec.md 反序列化封包生成二进制"]
         WriteBinT_B["回填输出至 translated/"]
@@ -217,17 +218,18 @@ flowchart TD
     class GitInit,FormatIRO,FormatAllA,CommitA,DiffB,FormatIRO_B,DiffIR_B,FormatAllB,CommitB gitTool;
     class TextBranch,CreateTextAgent,SpawnTextSub,WriteTextT,TextBranchB,CreateTextAgentB,SpawnTextSubB,WriteTextT_B textStream;
     class BinBranch,CreateBinAgent,Decompile,WriteSpec,WriteIRO,SpawnBinSub,WriteIRT,CompileBin,WriteBinT,BinBranchB,CreateBinAgentB,DecompileB,SpawnBinSubB,WriteIRT_B,CompileBinB,WriteBinT_B binStream;
-    class Fail,BranchD,InteractD warnNode;
+    class Fail,BranchD,InteractD,RL1,RL2,RL3,RL4 warnNode;
 ```
 
 ---
 
 ## ⚠️ 汉化红线规约 (防自作聪明/防偷懒)
 
-为确保模组汉化质量，执行本工作流的 Agent 必须无条件遵守以下三条铁律：
+为确保模组汉化质量，执行本工作流的 Agent 必须无条件遵守以下四条铁律：
 1. **拒绝任何旁路挂载设计**：严禁采取任何挂载自定义接口、注入非官方辅助框架或在外部旁路加载字典的汉化方案。必须直接且暴力地替换源码及配置文件中的英文字符串。
 2. **交付 100% 同构可覆盖目录**：汉化产物必须输出于 `translated/` 目录下，其文件目录层级结构必须与原始英文 Mod **完全同构**，达到能够直接一键拷贝并覆盖至创意工坊或游戏根目录下即可实装运行的效果。
 3. **严禁漏翻与文件偷懒**：必须全量对所有包含文本的媒介进行汉化（包括 CSV 等表格数据、以及 `.lua` 等源码脚本中硬编码的可见字符串）。严禁以任何借口漏掉特定类型文件（如“只翻 CSV 忽略 LUA”），且严禁在漏翻或未进行反序列化回填时自嗨宣称完成。
+4. **严禁多 Mod 并行与单文件单代理**：面对多 Mod 汉化请求时，主代理必须采用串行循环的方式依次处理每个 Mod，严禁为 Mod 级别并行化开辟子代理。主代理是与用户双向沟通的唯一实体，子代理严禁直接与用户进行交互。父代理在分派翻译任务时，必须对小文件/JSON 切片进行合理打包（Batching），控制下级并发子代理数量，严禁“一文件一代理”的无节制膨胀。
 
 ---
 
