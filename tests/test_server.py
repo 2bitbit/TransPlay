@@ -29,6 +29,7 @@ def test_server_resources_and_tools(setup_mcp_config):
     from transplay_mcp.server import (
         get_vault_path,
         get_max_commits,
+        get_workshop_path,
         format_json_files_tool,
         git_diff_check_tool,
         git_commit_version_tool,
@@ -39,6 +40,7 @@ def test_server_resources_and_tools(setup_mcp_config):
     # Test Resources
     assert get_vault_path() == str(vault_dir.absolute())
     assert get_max_commits() == "3"
+    assert get_workshop_path() == ""
 
     # Test git_diff_check_tool (should auto-init repo)
     game_id = "noita"
@@ -207,4 +209,18 @@ def test_server_all_mods_status_tool(setup_mcp_config):
     
     # 检查最后的 Check Summary 检查说明行是否正确捕获了 mod_new
     assert f"Check Summary: The following mods only have 'origin' directory and have not been translated yet: ['{game_id}/{mod_new}']" in res
+
+
+def test_server_workshop_path_configured(setup_mcp_config, tmp_path, monkeypatch):
+    workshop_dir = tmp_path / "SteamWorkshop"
+    workshop_dir.mkdir(exist_ok=True)
+
+    monkeypatch.setenv("TransPlayWorkshopPath", str(workshop_dir.absolute()))
+
+    import importlib
+    import transplay_mcp.server
+    importlib.reload(transplay_mcp.server)
+
+    from transplay_mcp.server import get_workshop_path
+    assert get_workshop_path() == str(workshop_dir.absolute())
 
