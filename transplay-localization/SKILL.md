@@ -27,6 +27,7 @@ flowchart TD
         RL2["2. 100百分之 同构交付：translated 结构与 origin 完全同构，一键覆盖"]
         RL3["3. 严禁漏翻与偷懒：全量汉化包括 CSV、LUA 等，严禁漏翻任何文件"]
         RL4["4. 独立全权委托与分批并发控制：每个 Mod 派发唯一的 Mod 翻译子代理，严禁二级代理；多 Mod 场景采用分批并发（每批 2~5 个）推进，降低限流崩溃风险"]
+        RL5["5. 严禁主代理自行读取/解析文件内容：读写/反编译/翻译均为子代理排他职责"]
     end
 
     Start(["开始：汉化/更新请求"])
@@ -175,18 +176,19 @@ flowchart TD
     class ReadConfig,CheckConfig,WriteFiles,RequestType,SingleRoute,BatchRoute,CheckExist,ScanAll,DecideRule,BranchC,PromptC,BranchA,BranchB,InitRepo,Consult,OptA,OptB,CleanCache,Deploy mainFlow;
     class CreateAgentA,ClassifyA,TranslateTextA,TranslateBinA,SyncMediaA,CreateAgentB,DiffB,ClassifyB,IgnoreB,CopyMediaB,TranslateTextB,TranslateBinB subAgentFlow;
     class FormatAllA,CommitA,FormatAllB,CommitB gitTool;
-    class Fail,BranchD,InteractD,RL1,RL2,RL3,RL4 warnNode;
+    class Fail,BranchD,InteractD,RL1,RL2,RL3,RL4,RL5 warnNode;
 ```
 
 ---
 
 ## ⚠️ 汉化红线规约 (防自作聪明/防偷懒)
 
-为确保模组汉化质量，执行本工作流的 Agent 必须无条件遵守以下四条铁律：
+为确保模组汉化质量，执行本工作流的 Agent 必须无条件遵守以下五条铁律：
 1. **拒绝任何旁路挂载设计**：严禁采取任何挂载自定义接口、注入非官方辅助框架或在外部旁路加载字典的汉化方案。必须直接且暴力地替换源码及配置文件中的英文字符串。
 2. **交付 100% 同构可覆盖目录**：汉化产物必须输出于 `translated/` 目录下，其文件目录层级结构必须与原始英文 Mod **完全同构**，达到能够直接一键拷贝并覆盖至创意工坊或游戏根目录下即可实装运行的效果。
 3. **严禁漏翻与文件偷懒**：必须全量对所有包含文本的媒介进行汉化（包括 CSV 等表格数据、以及 `.lua` 等源码脚本中硬编码的可见字符串）。严禁以任何借口漏掉特定类型文件（如“只翻 CSV 忽略 LUA”），且严禁在漏翻或未进行反序列化回填时自嗨宣称完成。
 4. **独立全权委托与分批并发控制**：主代理是与用户双向沟通的唯一实体，子代理严禁直接与用户进行交互。每个 Mod 的翻译任务必须全权合并委派给唯一的一个子代理（Mod 翻译子代理），**严禁在下级再拆分或开设二级子代理**。面对多 Mod 场景时，主代理先统一执行前置铺设（写入 `origin/`），然后采用**分批并发（每批启动 2~5 个子代理）**的方式推进，挂起等待本批全部返回后再进入下一批，在大幅提升整体吞吐量与执行速度的同时，完美规避 LLM 客户端 API 发生 429 限流崩溃的风险。
+5. **严禁主代理自行读取/解析 Mod 文件内容**：主代理在汉化推进全流程中，**绝对禁止自行读取、检索或解析任何 Mod 文件的具体内容（包括纯文本、二进制等）**。主代理仅负责物理文件包的统一拷贝/写入、Git 仓库级操作和唤醒子代理。读取、解析、修改、反编译及翻译文件内容的具体工作属于**子代理的排他职责**，以此规避主代理发生职责越界与上下文 Token 爆炸。
 
 ---
 
