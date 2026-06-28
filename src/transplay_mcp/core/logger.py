@@ -3,14 +3,15 @@ import os
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-# 日志输出目录统一采用系统安全临时目录，从环境变量直接读取以规避 tempfile 模块在 Windows 下引发的 pytest 长短路径名冲突
-temp_dir = os.environ.get("TEMP") or os.environ.get("TMP") or os.environ.get("USERPROFILE") or "/tmp"
-LOG_DIR = Path(temp_dir) / "transplay_mcp"
+import tempfile
+
+# 日志输出目录统一采用系统安全临时目录，彻底杜绝只读 site-packages 权限崩溃
+LOG_DIR = Path(tempfile.gettempdir()) / "transplay_mcp"
 try:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
 except Exception:
     # Fallback to tmp dir root if subdirectory creation fails
-    LOG_DIR = Path(temp_dir)
+    LOG_DIR = Path(tempfile.gettempdir())
 
 # 使用进程 PID 命名日志文件，防止 Windows 多进程并发写入同一个日志文件时引发文件锁死锁
 LOG_FILE = LOG_DIR / f"transplay_mcp_{os.getpid()}.log"

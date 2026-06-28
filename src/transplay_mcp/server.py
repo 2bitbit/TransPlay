@@ -129,8 +129,13 @@ def _safe_resolve_path(base_path: Path, *parts: str) -> Path:
 
     # 结合 parts 生成路径，resolve 消除相对路径
     resolved = (base_path / Path(*parts)).resolve()
+    
+    # 使用 os.path.realpath 展开 Windows 下可能存在的 8.3 短路径名形式，以防 is_relative_to 误判
+    real_resolved = Path(os.path.realpath(resolved))
+    real_base = Path(os.path.realpath(base_path))
+    
     # 强校验是否仍在 base_path 目录下
-    if not resolved.is_relative_to(base_path.resolve()):
+    if not real_resolved.is_relative_to(real_base):
         raise PermissionError("Path traversal detected! Access denied.")
     return resolved
 
