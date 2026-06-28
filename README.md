@@ -41,27 +41,42 @@ TransPlay MCP 是一个面向 AI 智能体（Agent）的、用于辅助游戏 Mo
 3. `TransPlaySteamWorkshopPath`（可选）：本地 Steam 创意工坊 content 目录的物理路径，配置后可用于协助大模型实装覆盖。
 
 ### 配置示例
-向你的 harness 对应的 MCP 配置文件（如`mcp_config.json`），写入类似下面这种意思的配置：
+
+向你的客户端集成软件对应的 MCP 配置文件中（如 Cursor 客户端或 Claude Desktop 配置文件 `mcp_config.json`），写入类似下面这种结构，**注意需将占位符替换为您自己本地对应的绝对路径**：
+
 ```json
 {
   "mcpServers": {
     "transplay-mcp": {
-      "cwd": "D:/Workspace/Repos/TransPlay",
+      "cwd": "<your_cloned_repository_absolute_path>",
       "command": "uv",
       "args": [
         "run",
         "transplay-mcp"
       ],
       "env": {
-        "TransPlayVault": "D:/TransPlayVault",
+        "TransPlayVault": "<your_transplay_vault_absolute_path>",
         "TransPlayMaxCommits": "3",
-        "TransPlaySteamWorkshopPath": "C:/Program Files (x86)/Steam/steamapps/workshop/content"
+        "TransPlaySteamWorkshopPath": "<your_steam_workshop_content_absolute_path_optional>"
       }
     }
   }
 }
 ```
-（并非一定要用 uv，普通的python解释器也可以，可自行处理）
+
+#### 手动配置与集成指引
+1. **参数占位符说明**：
+   - `<your_cloned_repository_absolute_path>`：克隆本仓库到您本地的绝对路径。
+   - `<your_transplay_vault_absolute_path>`：您本地用于统一存放和版本管理汉化模组的根目录文件夹（该目录在运行前**必须由您手动创建好**）。
+   - `<your_steam_workshop_content_absolute_path_optional>`（可选）：本地 Steam 创意工坊的 content 存放路径，通常位于 `<Steam安装路径>/steamapps/workshop/content`。配置后方可使 Agent 执行覆盖实装功能。
+2. **在 Cursor 中集成**：
+   - 打开 Cursor Settings -> Features -> MCP。
+   - 点击 `+ Add New MCP Server`。
+   - Name 写入 `transplay-mcp`，Type 选择 `command`，Command 写入 `uv run --project <your_repository_path> transplay-mcp`。
+   - 点击 `+ Add Env` 分别追加 `TransPlayVault`、`TransPlayMaxCommits` 及可选的 `TransPlaySteamWorkshopPath` 环境变量值。
+3. **在 Claude Desktop 中集成**：
+   - 将上述 JSON 配置片段写入到您的 `%APPDATA%\Claude\claude_desktop_config.json` 中并保存。
+   - 重启 Claude Desktop 客户端即可成功加载本服务。
 
 
 ## Development & Test (开发与测试)
