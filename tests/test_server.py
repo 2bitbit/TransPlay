@@ -49,7 +49,7 @@ def test_server_resources_and_tools(setup_mcp_config):
     assert res_diff_init == ""
 
     # Test format_json_files_tool
-    sub_dir = "origin"
+    sub_dir = "ir/origin"
     target_dir = vault_dir / game_id / mod_id / sub_dir
     target_dir.mkdir(parents=True, exist_ok=True)
     
@@ -60,7 +60,17 @@ def test_server_resources_and_tools(setup_mcp_config):
     assert "formatted successfully" in res
     assert json_file.read_text(encoding="utf-8") == '{\n  "a": 1,\n  "b": 2\n}'
 
-    # Test git_diff_check_tool again, now it should detect the new data.json
+    # Test that format_json_files_tool blocks non-ir directories
+    with pytest.raises(ValueError) as excinfo_val:
+        format_json_files_tool(game_id, mod_id, "origin")
+    assert "Access denied" in str(excinfo_val.value)
+
+    # Write another file to origin to test origin diff check
+    origin_dir = vault_dir / game_id / mod_id / "origin"
+    origin_dir.mkdir(parents=True, exist_ok=True)
+    (origin_dir / "data.json").write_text('{"b": 2}')
+
+    # Test git_diff_check_tool again, now it should detect the new data.json in origin
     res_diff = git_diff_check_tool(game_id, mod_id, need_origin=True, need_ir_origin=False)
     assert "data.json" in res_diff
     
@@ -121,7 +131,7 @@ def test_server_path_traversal_protection(setup_mcp_config):
     bad_mod = "bad_mod"
     
     with pytest.raises(PermissionError) as excinfo1:
-        format_json_files_tool(bad_game, bad_mod, "origin")
+        format_json_files_tool(bad_game, bad_mod, "ir/origin")
     assert "Invalid path identifier detected" in str(excinfo1.value)
     
     with pytest.raises(PermissionError) as excinfo2:
@@ -134,7 +144,7 @@ def test_server_path_traversal_protection(setup_mcp_config):
 
     # 传入含有 "." 或相对指示符号的非法参数
     with pytest.raises(PermissionError) as excinfo_dot:
-        format_json_files_tool(".", "test_mod", "origin")
+        format_json_files_tool(".", "test_mod", "ir/origin")
     assert "Invalid path identifier detected" in str(excinfo_dot.value)
 
 

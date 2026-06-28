@@ -27,3 +27,5 @@ dist/
 
 # 忽略测试用的游戏 Mod 真实二进制版权资源（本地保留，但不向公共 GitHub 提交）
 tests/fixtures/games/
+
+*.log

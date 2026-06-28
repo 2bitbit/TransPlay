@@ -143,17 +143,21 @@ def _safe_resolve_path(base_path: Path, *parts: str) -> Path:
 # 4. 注册并暴露 Tools 工具接口
 @mcp.tool()
 def format_json_files_tool(game_id: str, mod_id: str, sub_dir: str) -> str:
-    """在指定的模组子目录下，递归地对所有 JSON 文件进行键排序与强格式化。
+    """在指定的模组 ir/origin 或 ir/translated 子目录下，递归地对所有 JSON 文件进行键排序与强格式化。
 
-    路径格式：TransPlayVault/<game_id>/<mod_id>/<sub_dir>/.
+    绝对禁止在游戏直接读取的其它实装目录下（如 origin、translated）运行此工具，以防破坏原生文件键的依赖时序。
 
     Args:
         game_id: 游戏唯一标识（如 noita、cyberpunk2077）。
         mod_id: 模组唯一标识（如 创意工坊 ID 或模组文件夹名）。
-        sub_dir: 待格式化的子目录名（如 origin、ir/origin）。
+        sub_dir: 待格式化的子目录名（仅限 'ir/origin' 或 'ir/translated'）。
     """
+    if sub_dir not in ("ir/origin", "ir/translated"):
+        raise ValueError("Access denied! format_json_files_tool can only be called on 'ir/origin' or 'ir/translated'.")
+
     assert vault_path is not None
-    target_dir = _safe_resolve_path(vault_path, game_id, mod_id, sub_dir)
+    sub_dir_parts = sub_dir.split('/')
+    target_dir = _safe_resolve_path(vault_path, game_id, mod_id, *sub_dir_parts)
 
     if not target_dir.exists():
         raise FileNotFoundError(f"Target directory does not exist at {target_dir}")
