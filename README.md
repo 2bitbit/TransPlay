@@ -1,5 +1,10 @@
 # TransPlay MCP Server
 
+<div align="center">
+这是 noita 创意工坊的汉化结果示例<br>
+<img src="demo.png" width="50%">
+</div>
+
 ## 非技术用户阅读此节：
 
 ### 这是什么
