@@ -27,7 +27,8 @@ flowchart TD
         RL2["2. 100% 同构交付：translated 结构与 origin 完全同构，一键覆盖"]
         RL3["3. 严禁漏翻与偷懒：全量汉化包括 CSV 等表格数据、以及 .lua 等源码脚本中硬编码的可见字符串。严禁以任何借口漏掉特定类型文件（如“只翻 CSV 忽略 LUA”），且严禁在漏翻或未进行反序列化回填时自嗨宣称完成。"]
         RL4["4. 独立全权委托与分批并发控制：每个 Mod 派发唯一的 Mod 翻译子代理，严禁二级代理；多 Mod 场景采用分批并发（每批 2~5 个）推进，降低限流崩溃风险"]
-        RL5["5. 严禁主代理自行读取/解析文件内容：主代理绝不调用 git_diff_check_tool 读 Diff，读写/反编译/翻译均为子代理排他职责"]
+        RL5["5. 严禁主代理自行读取/解析 Mod 文件内容：主代理绝不调用 git_diff_check_tool 读 Diff，读写/反编译/翻译均为子代理排他职责"]
+        RL6["6. 严禁污染元数据与系统标识文件：配置文件如 mod_id.txt, compatibility.xml 严禁子代理重写，必须直接二进制物理拷贝"]
     end
 
     Start(["开始：汉化/更新请求"])
@@ -69,7 +70,7 @@ flowchart TD
     IsWorkshopSource -- 否 (Nexus/其他物理包) --> WriteFiles
     
     WriteFiles --> RequestType
-
+ 
     RequestType -- 单 Mod --> SingleRoute
     RequestType -- 批量/巡检 --> BatchRoute
     
@@ -93,10 +94,11 @@ flowchart TD
         
         subgraph sub_agent_a [子代理内部执行：全新翻译]
             InitRepo["子代理初始化仓库：<br/>调用 git_diff_check_tool(need_origin=True, need_ir_origin=False) 初始化仓库并生成 Initial Commit"]
-            ClassifyA["文件类型分类: 纯文本 / 二进制 / 媒体"]
+            ClassifyA["文件类型分类: 纯文本 / 二进制 / 媒体 / 系统元数据"]
             TranslateTextA["纯文本翻译：全盘翻译纯文本输出至 translated/"]
             TranslateBinA["二进制翻译：反编译为 JSON → 强格式化 → 翻译 JSON → 依据 ir/spec.md 回填反序列化"]
             SyncMediaA["媒体资产：同步/拷贝媒体资产至 translated/"]
+            CopyMetaA["系统元数据：直接二进制拷贝（如mod_id.txt），严禁修改或多加换行"]
             FormatAllA["强格式化: 仅在有二进制时对 ir/origin 和 ir/translated 目录调用 format_json_files_tool"]
             CommitA["提交固化: 调用 git_commit_version_tool 提交版本与说明"]
         end
@@ -111,10 +113,12 @@ flowchart TD
     ClassifyA --> TranslateTextA
     ClassifyA --> TranslateBinA
     ClassifyA --> SyncMediaA
+    ClassifyA --> CopyMetaA
     
     TranslateTextA --> CommitA
     TranslateBinA --> FormatAllA
     SyncMediaA --> CommitA
+    CopyMetaA --> CommitA
     FormatAllA --> CommitA
     CommitA --> AgentReturnA
 
@@ -123,11 +127,12 @@ flowchart TD
         
         subgraph sub_agent_b [子代理内部执行：增量更新]
             DiffB["首次 Diff: 调用 git_diff_check_tool(need_origin=True, need_ir_origin=False) 提取英文源码差异"]
-            ClassifyB["差异分类: 无变化 / 新增媒体 / 纯文本 / 二进制"]
+            ClassifyB["差异分类: 无变化 / 媒体 / 纯文本 / 二进制 / 系统元数据"]
             IgnoreB["无变化：上报主代理无需更新并安全退出"]
             CopyMediaB["媒体资产：拷贝新增/变动媒体至 translated/"]
             TranslateTextB["纯文本增量：统筹仅针对发生 Diff 变化的文件/行翻译"]
             TranslateBinB["二进制增量：反编译新版 JSON → 强格式化 → 二次 Diff (need_origin=False, need_ir_origin=True) 提取 JSON 差异 → 仅对差异键值对翻译 → 回填反序列化"]
+            CopyMetaB["系统元数据：直接二进制拷贝，与 origin 保持严格一致"]
             FormatAllB["强格式化: 仅在有二进制时对 ir/origin 和 ir/translated 目录调用 format_json_files_tool"]
             CommitB["提交固化: 调用 git_commit_version_tool 提交版本与说明"]
         end
@@ -143,11 +148,13 @@ flowchart TD
     ClassifyB --> CopyMediaB
     ClassifyB --> TranslateTextB
     ClassifyB --> TranslateBinB
+    ClassifyB --> CopyMetaB
     
     IgnoreB --> AgentReturnB
     CopyMediaB --> CommitB
     TranslateTextB --> CommitB
     TranslateBinB --> FormatAllB
+    CopyMetaB --> CommitB
     FormatAllB --> CommitB
     CommitB --> AgentReturnB
 
@@ -174,21 +181,22 @@ flowchart TD
     %% 显式类样式绑定
     class Start,End startEnd;
     class ReadConfig,CheckConfig,IsWorkshopSource,NeedVerify,WriteFiles,RequestType,SingleRoute,BatchRoute,CheckExist,ScanAll,DecideRule,BranchD,BranchA,BranchB,Consult,OptA,OptB,CleanCache,Deploy mainFlow;
-    class CreateAgentA,InitRepo,ClassifyA,TranslateTextA,TranslateBinA,SyncMediaA,CreateAgentB,DiffB,ClassifyB,IgnoreB,CopyMediaB,TranslateTextB,TranslateBinB,AgentReturnA,AgentReturnB subAgentFlow;
+    class CreateAgentA,InitRepo,ClassifyA,TranslateTextA,TranslateBinA,SyncMediaA,CopyMetaA,CreateAgentB,DiffB,ClassifyB,IgnoreB,CopyMediaB,TranslateTextB,TranslateBinB,CopyMetaB,AgentReturnA,AgentReturnB subAgentFlow;
     class FormatAllA,CommitA,FormatAllB,CommitB gitTool;
-    class Fail,InteractD,RL1,RL2,RL3,RL4,RL5 warnNode;
+    class Fail,InteractD,RL1,RL2,RL3,RL4,RL5,RL6 warnNode;
 ```
 
 ---
 
 ## ⚠️ 汉化红线规约 (防自作聪明/防偷懒)
 
-为确保模组汉化质量，执行本工作流的 Agent 必须无条件遵守以下五条铁律：
+为确保模组汉化质量，执行本工作流的 Agent 必须无条件遵守以下六条铁律：
 1. **拒绝任何旁路挂载设计**：严禁采取任何挂载自定义接口、注入非官方辅助框架或在外部旁路加载字典的汉化方案。必须直接且暴力地替换源码及配置文件中的英文字符串。
 2. **交付 100% 同构可覆盖目录**：汉化产物必须输出于 `translated/` 目录下，其文件目录层级结构必须与原始英文 Mod **完全同构**，达到能够直接一键拷贝并覆盖至创意工坊或游戏根目录下即可实装运行的效果。
 3. **严禁漏翻与文件偷懒**：必须全量对所有包含文本的媒介进行汉化（包括 CSV 等表格数据、以及 `.lua` 等源码脚本中硬编码的可见字符串）。严禁以任何借口漏掉特定类型文件（如“只翻 CSV 忽略 LUA”），且严禁在漏翻或未进行反序列化回填时自嗨宣称完成。
 4. **独立全权委托与分批并发控制**：主代理是与用户双向沟通的唯一实体，子代理严禁直接与用户进行交互。每个 Mod 的翻译任务必须全权合并委派给唯一的一个子代理（Mod 翻译子代理），**严禁在下级再拆分或开设二级子代理**。面对多 Mod 场景时，主代理先统一执行前置铺设（写入 `origin/`），然后采用**分批并发（每批启动 2~5 个子代理）**的方式推进，挂起等待本批全部返回后再进入下一批，在大幅提升整体吞吐量与执行速度的同时，完美规避 LLM 客户端 API 发生 429 限流崩溃的风险。
 5. **严禁主代理自行读取/解析 Mod 文件内容**：主代理在汉化推进全流程中，**绝对禁止自行读取、检索或解析任何 Mod 文件的具体内容（包括纯文本、二进制等）**。主代理**绝对禁止**调用会返回具体文件 Diff 内容的 `git_diff_check_tool` 工具，以防大 Mod 的 Diff 文本注入主代理上下文导致 Token 爆炸。主代理仅负责物理文件包的统一拷贝/写入、高层次状态获取与唤醒子代理。仓库的 Git 初始化、具体 Diff 差异分析以及文件读取、反编译与翻译均属于**子代理的排他职责**。
+6. **严禁污染元数据与系统标识文件**：对于仅包含系统 ID、别名、版本号、环境依赖或无须汉化的纯配置文件（如 Noita 的 `mod_id.txt`、`compatibility.xml`，或其它游戏的清单 `manifest.json`、`addoninfo.txt` 等），**绝对禁止子代理使用文本流重写**。必须直接使用纯二进制物理拷贝（或直接还原），严防因代码写文件操作在文件尾部引入任何多余的换行符（如 `\n` 或 `\r\n`）、空格或改变其原始字节与编码，避免造成路径映射、依赖检测或游戏引擎加载失效。
 
 ---
 
@@ -214,7 +222,7 @@ flowchart TD
 
 ## 2. 主代理物理前置准备：新旧源码写入/覆盖（核心前置）
 
-为了能让路由决策机制（特别是 Git 增量差异检测）获得准确的物理判断依据，**主代理在进行任何状态路由与判定之前，必须优先完成以下前置准备**：
+为了能让路由决策机制（特别是 Git 增量差异检测）获得准确的物理判断依据，**主代理在进行 any 状态路由与判定之前，必须优先完成以下前置准备**：
 
 1. **Steam 创意工坊拉取安全校验（强人机确认）**：
    - **防污染硬约束**：若拉取源为本地 Steam 创意工坊目录（即 `steam_workshop_path` 对应的路径，该路径在此前可能已被译文覆盖实装过），**主代理严禁采取任何无脑的自动拉取或拷贝写入操作**。
@@ -242,7 +250,7 @@ flowchart TD
 ## 4. 全新翻译流程
 
 1. **主代理分批并发指派子代理**：
-   - 主代理**严禁调用** `git_diff_check_tool`（防止海量原始文件 Diff 灌入主代理上下文）。主代理在写入原版文件后，直接采用**分批并发（每批并发启动 2~5 个子代理）**的模式推进。
+   - **主代理严禁调用** `git_diff_check_tool`（防止海量原始文件 Diff 灌入主代理上下文）。主代理在写入原版文件后，直接采用**分批并发（每批并发启动 2~5 个子代理）**的模式推进。
    - 每批次中，主代理为每个 Mod 创建唯一的 **[Mod 翻译子代理]** 并全权指派，**该子代理内部严禁继续向下开辟二级子代理**。
    - 主代理挂起主线程，等待本批次所有子代理返回成功。
 2. **子代理内部仓库初始化与文件处理**：
