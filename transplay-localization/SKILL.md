@@ -39,6 +39,8 @@ flowchart TD
     end
 
     subgraph pre_write [2. 主代理物理前置准备]
+        IsWorkshopSource{"拉取源是否为<br/>本地创意工坊?"}
+        NeedVerify["主代理挂起流程，主动向用户提问校验：<br/>双向确认创意工坊内确实是干净未汉化原版"]
         WriteFiles["主代理覆盖写入：<br/>将待处理 Mod 的英文原版文件写入/覆盖写入到对应的 origin/ 目录下"]
     end
 
@@ -63,7 +65,12 @@ flowchart TD
     Start --> ReadConfig
     ReadConfig --> CheckConfig
     CheckConfig -- 否 --> Fail
-    CheckConfig -- 是 --> WriteFiles
+    CheckConfig -- 是 --> IsWorkshopSource
+    
+    IsWorkshopSource -- 是 --> NeedVerify
+    NeedVerify --> WriteFiles
+    IsWorkshopSource -- 否 (Nexus/其他物理包) --> WriteFiles
+    
     WriteFiles --> RequestType
 
     RequestType -- 单 Mod --> SingleRoute
@@ -173,7 +180,7 @@ flowchart TD
 
     %% 显式类样式绑定
     class Start,End startEnd;
-    class ReadConfig,CheckConfig,WriteFiles,RequestType,SingleRoute,BatchRoute,CheckExist,ScanAll,DecideRule,BranchC,PromptC,BranchA,BranchB,InitRepo,Consult,OptA,OptB,CleanCache,Deploy mainFlow;
+    class ReadConfig,CheckConfig,IsWorkshopSource,NeedVerify,WriteFiles,RequestType,SingleRoute,BatchRoute,CheckExist,ScanAll,DecideRule,BranchC,PromptC,BranchA,BranchB,InitRepo,Consult,OptA,OptB,CleanCache,Deploy mainFlow;
     class CreateAgentA,ClassifyA,TranslateTextA,TranslateBinA,SyncMediaA,CreateAgentB,DiffB,ClassifyB,IgnoreB,CopyMediaB,TranslateTextB,TranslateBinB subAgentFlow;
     class FormatAllA,CommitA,FormatAllB,CommitB gitTool;
     class Fail,BranchD,InteractD,RL1,RL2,RL3,RL4,RL5 warnNode;
@@ -214,10 +221,13 @@ flowchart TD
 
 ## 2. 主代理物理前置准备：新旧源码写入/覆盖（核心前置）
 
-为了能让路由决策机制（特别是 Git 增量差异检测）获得准确的物理判断依据，**主代理在进行任何状态路由 and 判定之前，必须优先完成以下前置准备**：
+为了能让路由决策机制（特别是 Git 增量差异检测）获得准确 of 物理判断依据，**主代理在进行任何状态路由 and 判定之前，必须优先完成以下前置准备**：
 
-1. **物理覆盖写入**：主代理统一将本次用户提供的待处理模组英文原版文件写入（若为全新翻译）或**覆盖写入**（若为增量更新）到各自 Mod 仓库的 `origin/` 目录下。
-2. **目的与意义**：只有先完成这一步，若属于增量更新场景，`origin/` 工作区中才会被制造出新覆盖引起的未提交改动，从而使后续 of Git 差异判定不至于因“未写入”而发生漏检或误判。
+1. **Steam 创意工坊拉取安全校验（强人机确认）**：
+   - **防污染硬约束**：若拉取源为本地 Steam 创意工坊目录（即 `steam_workshop_path` 对应的路径，该路径在此前可能已被译文覆盖实装过），**主代理严禁采取任何无脑 of 自动拉取或拷贝写入操作**。
+   - **双向交互校验**：主代理必须**挂起流程，主动向用户发起提问**，显式引导用户核对并确认：当前创意工坊目录下的模组文件确实已被官方更新且**目前为干净、未汉化的原版英文 Mod**。在获得用户在对话中明确 of “是/已确认”等肯定授权后，方可执行拷贝写入。非创意工坊源（如直接提供 of Nexus 干净包等）可豁免此交互步骤。
+2. **物理覆盖写入**：主代理统一将确认完毕后的待处理模组英文原版文件写入（若为全新翻译）或**覆盖写入**（若为增量更新）到各自 Mod 仓库 of `origin/` 目录下。
+3. **目的与意义**：只有先完成这一步，若属于增量更新场景，`origin/` 工作区中才会被制造出新覆盖引起的未提交改动，从而使后续 of Git 差异判定不至于因“未写入”而发生漏检或误判。
 
 ---
 
