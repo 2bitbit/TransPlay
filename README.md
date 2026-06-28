@@ -64,19 +64,10 @@ TransPlay MCP 是一个面向 AI 智能体（Agent）的、用于辅助游戏 Mo
 }
 ```
 
-#### 手动配置与集成指引
-1. **参数占位符说明**：
-   - `<your_cloned_repository_absolute_path>`：克隆本仓库到您本地的绝对路径。
-   - `<your_transplay_vault_absolute_path>`：您本地用于统一存放和版本管理汉化模组的根目录文件夹（该目录在运行前**必须由您手动创建好**）。
-   - `<your_steam_workshop_content_absolute_path_optional>`（可选）：本地 Steam 创意工坊的 content 存放路径，通常位于 `<Steam安装路径>/steamapps/workshop/content`。配置后方可使 Agent 执行覆盖实装功能。
-2. **在 Cursor 中集成**：
-   - 打开 Cursor Settings -> Features -> MCP。
-   - 点击 `+ Add New MCP Server`。
-   - Name 写入 `transplay-mcp`，Type 选择 `command`，Command 写入 `uv run --project <your_repository_path> transplay-mcp`。
-   - 点击 `+ Add Env` 分别追加 `TransPlayVault`、`TransPlayMaxCommits` 及可选的 `TransPlaySteamWorkshopPath` 环境变量值。
-3. **在 Claude Desktop 中集成**：
-   - 将上述 JSON 配置片段写入到您的 `%APPDATA%\Claude\claude_desktop_config.json` 中并保存。
-   - 重启 Claude Desktop 客户端即可成功加载本服务。
+**参数占位符说明**：
+- `<your_cloned_repository_absolute_path>`：克隆本仓库到您本地的绝对路径。
+- `<your_transplay_vault_absolute_path>`：您本地用于统一存放和版本管理汉化模组的根目录文件夹（该目录在运行前**必须由您手动创建好**）。
+- `<your_steam_workshop_content_absolute_path_optional>`（可选）：本地 Steam 创意工坊的 content 存放路径，通常位于 `<Steam安装路径>/steamapps/workshop/content`。配置后方可使 Agent 执行覆盖实装功能。
 
 
 ## Development & Test (开发与测试)
@@ -101,6 +92,10 @@ uv run pyright src/
 - 译 mod：使用 agent，利用 TransPlay MCP 轻松管理汉化
 
 
-<p style="text-align: center; font-size: 12px; color: #666666;">
-  ( •̀ ω •́ )y     No Trans, No Play. Trans here, Play here. Trans for Play, Play for Trans. Trans me, Play me. I Trans, I play.              ٩(｡・ω・｡)﻿و
+<p align="center">
+ 
+$$\color{gray}{\small\textsf{( •̀ ω •́ )y}}$$
+$$\color{gray}{\small\textsf{No Trans, No Play. Trans here, Play here. Trans for Play, Play for Trans. Trans me, Play me. I Trans, I play.}}$$
+$$\color{gray}{\small\textsf{٩(｡・ω・｡)﻿و}}$$
 </p>
+
